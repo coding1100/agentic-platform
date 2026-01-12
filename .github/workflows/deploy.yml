@@ -33,7 +33,7 @@ jobs:
             set -e
             
             # Navigate to deployment directory
-            cd ${DEPLOY_PATH:-/var/www/agentic-platform}
+            cd ${DEPLOY_PATH:-/root/agentic-platform}
             
             # Pull latest code
             git fetch origin
