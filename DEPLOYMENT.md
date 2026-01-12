@@ -159,15 +159,24 @@ apt-get install -y nginx certbot python3-certbot-nginx
 
 ```bash
 # Copy nginx config (adjust path to your repository location)
-cp /root/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
+cp /root/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform.conf
 # Or if you used a different path:
-# cp ~/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
+# cp ~/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform.conf
 
-# Enable site
-ln -s /etc/nginx/sites-available/agentic-platform /etc/nginx/sites-enabled/
+# Remove any conflicting certbot-created config
+rm -f /etc/nginx/sites-enabled/agentic-platform.namatechnologlies.com
+
+# Remove old symlink if it exists
+rm -f /etc/nginx/sites-enabled/agentic-platform.conf
+
+# Enable site (create symlink)
+ln -s /etc/nginx/sites-available/agentic-platform.conf /etc/nginx/sites-enabled/agentic-platform.conf
 
 # Test configuration
 nginx -t
+
+# If test passes, reload nginx
+systemctl reload nginx
 ```
 
 The nginx config file (`nginx/agentic-platform.conf`) includes:
