@@ -1,0 +1,16 @@
+[Unit]
+Description=Agentic Platform Backend API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/agentic-platform/backend
+Environment="PATH=/var/www/agentic-platform/backend/venv/bin"
+ExecStart=/var/www/agentic-platform/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8009
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

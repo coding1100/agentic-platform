@@ -1,0 +1,213 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from uuid import UUID
+from typing import List
+from datetime import datetime, timedelta
+from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.core.security import generate_api_key, hash_api_key
+from app.models.user import User
+from app.models.api_key import ApiKey
+from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyUsageStats
+
+router = APIRouter()
+
+
+@router.get("", response_model=List[ApiKeyResponse])
+async def list_api_keys(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all API keys for the current user."""
+    api_keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.id).all()
+    return api_keys
+
+
+@router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
+async def create_api_key(
+    api_key_data: ApiKeyCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new API key for a specific agent."""
+    # Verify agent ownership or prebuilt access
+    from app.models.agent import Agent
+    agent = db.query(Agent).filter(
+        Agent.id == api_key_data.agent_id,
+        (
+            (Agent.user_id == current_user.id)
+            | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
+        ),
+    ).first()
+    
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found or you don't have access to it"
+        )
+    
+    # Generate new API key
+    plain_key = generate_api_key()
+    key_hash = hash_api_key(plain_key)
+    
+    # Create API key record
+    api_key = ApiKey(
+        user_id=current_user.id,
+        agent_id=api_key_data.agent_id,
+        key_hash=key_hash,
+        name=api_key_data.name,
+        expires_at=api_key_data.expires_at,
+        rate_limit_per_minute=api_key_data.rate_limit_per_minute,
+    )
+    db.add(api_key)
+    db.commit()
+    db.refresh(api_key)
+    
+    # Return response with the plain key (only shown once)
+    response = ApiKeyResponse(
+        id=api_key.id,
+        agent_id=api_key.agent_id,
+        name=api_key.name,
+        is_active=api_key.is_active,
+        last_used_at=api_key.last_used_at,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at,
+        rate_limit_per_minute=api_key.rate_limit_per_minute,
+        total_requests=api_key.total_requests,
+        key=plain_key,  # Include plain key only on creation
+        agent_slug=agent.slug  # Include agent slug for URL generation
+    )
+    
+    return response
+
+
+@router.get("/{api_key_id}", response_model=ApiKeyResponse)
+async def get_api_key(
+    api_key_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific API key by ID."""
+    from app.models.agent import Agent
+    api_key = db.query(ApiKey).filter(
+        ApiKey.id == api_key_id,
+        ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
+    return ApiKeyResponse(
+        id=api_key.id,
+        agent_id=api_key.agent_id,
+        name=api_key.name,
+        is_active=api_key.is_active,
+        last_used_at=api_key.last_used_at,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at,
+        rate_limit_per_minute=api_key.rate_limit_per_minute,
+        total_requests=api_key.total_requests,
+        agent_slug=agent.slug if agent else None
+    )
+
+
+@router.delete("/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_api_key(
+    api_key_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an API key."""
+    api_key = db.query(ApiKey).filter(
+        ApiKey.id == api_key_id,
+        ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    db.delete(api_key)
+    db.commit()
+    
+    return None
+
+
+@router.patch("/{api_key_id}/toggle", response_model=ApiKeyResponse)
+async def toggle_api_key(
+    api_key_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Toggle API key active status."""
+    from app.models.agent import Agent
+    api_key = db.query(ApiKey).filter(
+        ApiKey.id == api_key_id,
+        ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    api_key.is_active = not api_key.is_active
+    db.commit()
+    db.refresh(api_key)
+    
+    agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
+    return ApiKeyResponse(
+        id=api_key.id,
+        agent_id=api_key.agent_id,
+        name=api_key.name,
+        is_active=api_key.is_active,
+        last_used_at=api_key.last_used_at,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at,
+        rate_limit_per_minute=api_key.rate_limit_per_minute,
+        total_requests=api_key.total_requests,
+        agent_slug=agent.slug if agent else None
+    )
+
+
+@router.get("/{api_key_id}/usage", response_model=ApiKeyUsageStats)
+async def get_api_key_usage(
+    api_key_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get usage statistics for an API key."""
+    api_key = db.query(ApiKey).filter(
+        ApiKey.id == api_key_id,
+        ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    # Calculate requests today and this month
+    today = datetime.utcnow().date()
+    month_start = datetime.utcnow().replace(day=1).date()
+    
+    # For now, we'll use total_requests as a proxy
+    # In a production system, you'd want to track requests in a separate table
+    requests_today = 0  # TODO: Implement proper tracking
+    requests_this_month = api_key.total_requests  # TODO: Implement proper tracking
+    
+    return ApiKeyUsageStats(
+        total_requests=api_key.total_requests,
+        last_used_at=api_key.last_used_at,
+        requests_today=requests_today,
+        requests_this_month=requests_this_month
+    )
+
