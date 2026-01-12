@@ -25,11 +25,8 @@ echo -e "${YELLOW}Pulling latest code...${NC}"
 git fetch origin
 git reset --hard origin/main
 
-# Load environment variables if .env exists
-if [ -f ".env" ]; then
-  echo -e "${YELLOW}Loading environment variables from .env...${NC}"
-  export $(cat .env | grep -v '^#' | xargs)
-fi
+# Note: .env file will be automatically loaded by docker-compose
+# No need to export it here
 
 # Build and start containers
 echo -e "${YELLOW}Building and starting containers...${NC}"
