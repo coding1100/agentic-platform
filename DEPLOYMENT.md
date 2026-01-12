@@ -203,20 +203,7 @@ Certbot will:
 
 ## Step 5: GitHub Actions Configuration
 
-### 5.1 Generate SSH Key
-
-On your local machine:
-```bash
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/deploy_key
-```
-
-### 5.2 Add Public Key to VPS
-
-```bash
-cat ~/.ssh/deploy_key.pub | ssh root@148.230.93.34 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
-```
-
-### 5.3 Configure GitHub Secrets
+### 5.1 Configure GitHub Secrets
 
 Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
@@ -224,20 +211,12 @@ Add these 4 secrets:
 
 1. **VPS_HOST**: `148.230.93.34`
 2. **VPS_USER**: `root`
-3. **VPS_SSH_PRIVATE_KEY**: Copy the entire private key content:
-   ```bash
-   cat ~/.ssh/deploy_key
-   ```
-   Copy everything including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`
-4. **DEPLOY_PATH**: The path where you cloned the repository (e.g., `/var/www/agentic-platform`, `/opt/agentic-platform`, or any path you chose)
+3. **VPS_PASSWORD**: Your VPS root password
+4. **DEPLOY_PATH**: The path where you cloned the repository
+   - If using `~/agentic-platform` with root user: `/root/agentic-platform`
+   - Other common paths: `/var/www/agentic-platform`, `/opt/agentic-platform`
 
-### 5.4 Test SSH Connection
-
-```bash
-ssh -i ~/.ssh/deploy_key root@148.230.93.34
-```
-
-If it works, GitHub Actions will be able to deploy automatically.
+**Note:** Using password authentication is less secure than SSH keys. For better security, consider setting up SSH key authentication later.
 
 ## Step 6: Test Deployment
 
