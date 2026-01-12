@@ -225,9 +225,17 @@ Add these 4 secrets:
 SSH into your VPS and run:
 ```bash
 # Navigate to your repository directory
-cd /var/www/agentic-platform  # or your chosen path
-chmod +x scripts/deploy-docker.sh
-./scripts/deploy-docker.sh
+cd /root/agentic-platform  # or your chosen path
+
+# Pull latest code
+git fetch origin --prune
+git checkout main
+git pull origin main
+
+# Deploy with Docker Compose
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml build --no-cache
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ### 6.2 CI/CD Test
@@ -404,9 +412,13 @@ If CI/CD isn't working, deploy manually:
 
 ```bash
 ssh root@148.230.93.34
-cd /var/www/agentic-platform  # or your chosen deployment path
+cd /root/agentic-platform  # or your chosen deployment path
+git fetch origin --prune
+git checkout main
 git pull origin main
-docker-compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml build --no-cache
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ## Environment Variables Reference
@@ -473,7 +485,6 @@ docker run --rm -v agentic_platform_postgres_data:/data -v $(pwd):/backup alpine
 - `docker-compose.yml` - Development Docker Compose configuration
 - `backend/Dockerfile` - Backend container definition
 - `frontend/Dockerfile` - Frontend container definition
-- `scripts/deploy-docker.sh` - Docker-based deployment script
 - `.github/workflows/deploy.yml` - CI/CD workflow
 
 ## All Set!
