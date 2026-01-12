@@ -100,7 +100,49 @@ class LangchainAgentService:
     """
     Simplified LangChain agent - uses simple chain for all agents.
     Merges history properly to avoid consecutive same-role messages.
+    
+    For quiz requests, intercepts and generates quiz directly in a single call.
     """
+    # Check if this is a quiz request - intercept and generate directly
+    latest_lower = latest_input.lower() if latest_input else ""
+    is_quiz_request = (
+      "quiz" in latest_lower or 
+      "generate" in latest_lower and ("question" in latest_lower or "mcq" in latest_lower) or
+      "multiple choice" in latest_lower
+    )
+    
+    # If it's a quiz request for prebuilt agents, generate directly
+    if is_quiz_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
+      if agent.slug in [PREBUILT_AGENT_SLUGS["personal_tutor"], 
+                        PREBUILT_AGENT_SLUGS["course_creation_agent"],
+                        PREBUILT_AGENT_SLUGS["language_practice_agent"]]:
+        # Extract quiz parameters from the request
+        import re
+        topic_match = re.search(r'(?:about|on|for)\s+([^,\.\?]+?)(?:\s+with|\s+at|\s+of|$)', latest_input, re.IGNORECASE)
+        topic = topic_match.group(1).strip() if topic_match else "general knowledge"
+        
+        difficulty_match = re.search(r'(easy|medium|hard|beginner|intermediate|advanced)', latest_input, re.IGNORECASE)
+        difficulty = difficulty_match.group(1).lower() if difficulty_match else "medium"
+        if difficulty in ["beginner"]:
+          difficulty = "easy"
+        elif difficulty in ["intermediate"]:
+          difficulty = "medium"
+        elif difficulty in ["advanced"]:
+          difficulty = "hard"
+        
+        num_match = re.search(r'(\d+)\s*(?:questions?|mcqs?)', latest_input, re.IGNORECASE)
+        num_questions = int(num_match.group(1)) if num_match else 5
+        
+        # Generate quiz directly using the tool (single API call)
+        from app.tools.prebuilt_agents import _generate_quiz
+        try:
+          quiz_output = _generate_quiz(topic=topic, difficulty=difficulty, num_questions=num_questions)
+          return quiz_output
+        except Exception as e:
+          # Fallback to normal generation if tool fails
+          print(f"Quiz generation tool failed, falling back to normal generation: {str(e)}")
+    
     # Build messages with latest_input merged properly
     chat_history = self._history_to_messages(history, latest_input)
     
