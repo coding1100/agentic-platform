@@ -24,7 +24,16 @@ async def list_public_agents(
 ):
     """List all available prebuilt agents (public API)."""
     current_user, api_key = user_and_key
-    # Only return the agent associated with this API key
+    
+    # If agent_id is null, return all prebuilt agents (universal key)
+    if api_key.agent_id is None:
+        agents = db.query(Agent).filter(
+            Agent.is_prebuilt.is_(True),
+            Agent.is_active.is_(True)
+        ).all()
+        return agents
+    
+    # Otherwise, return only the agent associated with this API key
     agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
     if not agent:
         raise HTTPException(
@@ -42,9 +51,9 @@ async def get_public_agent(
 ):
     """Get a specific agent by slug (public API)."""
     current_user, api_key = user_and_key
-    # Verify the API key is for this agent
+    
+    # Find the agent by slug
     agent = db.query(Agent).filter(
-        Agent.id == api_key.agent_id,
         Agent.slug == agent_slug,
         Agent.is_prebuilt.is_(True),
         Agent.is_active.is_(True),
@@ -53,7 +62,14 @@ async def get_public_agent(
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found or API key is not authorized for this agent"
+            detail="Agent not found"
+        )
+    
+    # If API key is agent-specific, verify it matches
+    if api_key.agent_id is not None and api_key.agent_id != agent.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is not authorized for this agent"
         )
     
     return agent
@@ -68,9 +84,9 @@ async def public_chat(
 ):
     """Send a message to an agent via public API (using agent slug)."""
     current_user, api_key = user_and_key
-    # Verify the API key is for this agent
+    
+    # Find the agent by slug
     agent = db.query(Agent).filter(
-        Agent.id == api_key.agent_id,
         Agent.slug == agent_slug,
         Agent.is_prebuilt.is_(True),
         Agent.is_active.is_(True),
@@ -79,7 +95,14 @@ async def public_chat(
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found or API key is not authorized for this agent"
+            detail="Agent not found"
+        )
+    
+    # If API key is agent-specific, verify it matches
+    if api_key.agent_id is not None and api_key.agent_id != agent.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is not authorized for this agent"
         )
     
     # Get or create conversation
@@ -188,9 +211,9 @@ async def create_public_conversation(
 ):
     """Create a new conversation for an agent (public API)."""
     current_user, api_key = user_and_key
-    # Verify the API key is for this agent
+    
+    # Find the agent by slug
     agent = db.query(Agent).filter(
-        Agent.id == api_key.agent_id,
         Agent.slug == agent_slug,
         Agent.is_prebuilt.is_(True),
         Agent.is_active.is_(True),
@@ -199,7 +222,14 @@ async def create_public_conversation(
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found or API key is not authorized for this agent"
+            detail="Agent not found"
+        )
+    
+    # If API key is agent-specific, verify it matches
+    if api_key.agent_id is not None and api_key.agent_id != agent.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is not authorized for this agent"
         )
     
     # Create conversation
@@ -238,17 +268,24 @@ async def get_public_conversation(
 ):
     """Get a conversation with its messages (public API)."""
     current_user, api_key = user_and_key
-    # Verify conversation belongs to the agent associated with the API key
+    
+    # Find the conversation
     conversation = db.query(Conversation).filter(
         Conversation.id == conversation_id,
-        Conversation.user_id == current_user.id,
-        Conversation.agent_id == api_key.agent_id
+        Conversation.user_id == current_user.id
     ).first()
     
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found"
+        )
+    
+    # If API key is agent-specific, verify it matches the conversation's agent
+    if api_key.agent_id is not None and api_key.agent_id != conversation.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is not authorized for this conversation's agent"
         )
     
     # Get all messages

@@ -6,7 +6,7 @@ export interface User {
 
 export interface ApiKey {
   id: string
-  agent_id: string
+  agent_id: string | null // null = universal key for all agents
   name: string
   is_active: boolean
   last_used_at: string | null
@@ -14,14 +14,23 @@ export interface ApiKey {
   created_at: string
   rate_limit_per_minute: number
   total_requests: number
+  allowed_origins?: string[] | null // null or empty = allow all origins
   key?: string // Only present when creating a new key
-  agent_slug?: string // Agent slug for URL generation
+  agent_slug?: string | null // Agent slug for URL generation
 }
 
 export interface ApiKeyCreate {
-  agent_id: string
+  agent_id?: string | null // null = universal key for all agents
   name: string
   expires_at?: string | null
+  rate_limit_per_minute?: number
+  allowed_origins?: string[] | null // null or empty = allow all origins
+}
+
+export interface ApiKeyUpdate {
+  name?: string
+  allowed_origins?: string[] | null // null or empty = allow all origins
+  is_active?: boolean
   rate_limit_per_minute?: number
 }
 

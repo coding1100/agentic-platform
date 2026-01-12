@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -38,15 +38,33 @@ async def get_current_user(
 
 
 async def get_api_key_user(
+    request: Request,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    origin: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Get user and API key from API key authentication. Returns (user, api_key)."""
+    """Get user and API key from API key authentication. Returns (user, api_key).
+    
+    Also validates domain whitelisting if configured for the API key.
+    """
     if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key is required. Provide it in the X-API-Key header.",
         )
+    
+    # Get origin from header (fallback to Referer if Origin not present)
+    request_origin = origin
+    if not request_origin:
+        referer = request.headers.get("Referer")
+        if referer:
+            # Extract origin from Referer (e.g., "https://example.com/path" -> "https://example.com")
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(referer)
+                request_origin = f"{parsed.scheme}://{parsed.netloc}"
+            except Exception:
+                pass
     
     # Find API key by checking hash
     api_keys = db.query(ApiKey).filter(ApiKey.is_active.is_(True)).all()
@@ -68,6 +86,14 @@ async def get_api_key_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key has expired",
+        )
+    
+    # Validate domain whitelisting
+    if not matching_key.is_origin_allowed(request_origin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"API key is not authorized for origin: {request_origin or 'unknown'}. "
+                   f"Allowed origins: {matching_key.allowed_origins or 'all'}",
         )
     
     # Update last used timestamp

@@ -43,8 +43,11 @@
             <div class="key-info">
               <h3>{{ key.name }}</h3>
               <div class="key-meta">
-                <span class="agent-name" v-if="getAgentName(key.agent_id)">
+                <span class="agent-name" v-if="key.agent_id && getAgentName(key.agent_id)">
                   Agent: {{ getAgentName(key.agent_id) }}
+                </span>
+                <span class="agent-name" v-else>
+                  All Agents (Universal)
                 </span>
                 <span :class="['status-badge', key.is_active ? 'active' : 'inactive']">
                   {{ key.is_active ? 'Active' : 'Inactive' }}
@@ -99,6 +102,25 @@
               <span class="label">Expires:</span>
               <span class="value">{{ formatDate(key.expires_at) }}</span>
             </div>
+            <div class="detail-item" v-if="key.allowed_origins && key.allowed_origins.length > 0">
+              <span class="label">Allowed Origins:</span>
+              <div class="origins-list">
+                <span v-for="(origin, idx) in key.allowed_origins" :key="idx" class="origin-badge">{{ origin }}</span>
+              </div>
+            </div>
+            <div class="detail-item" v-else>
+              <span class="label">Allowed Origins:</span>
+              <span class="value">All domains</span>
+            </div>
+          </div>
+          <div class="key-actions-bottom">
+            <button
+              @click="editKey(key)"
+              class="btn-secondary-small"
+              title="Edit"
+            >
+              ✏️ Edit
+            </button>
           </div>
         </div>
       </div>
@@ -114,14 +136,13 @@
         <div class="modal-body">
         <form @submit.prevent="handleCreateKey">
           <div class="form-group">
-            <label for="agent-select">Agent *</label>
+            <label for="agent-select">Agent</label>
             <select
               id="agent-select"
               v-model="newKeyForm.agent_id"
-              required
               class="form-input"
             >
-              <option value="">Select an agent...</option>
+              <option value="">All Agents (Universal Key)</option>
               <option
                 v-for="agent in availableAgents"
                 :key="agent.id"
@@ -130,7 +151,7 @@
                 {{ agent.name }} {{ agent.is_prebuilt ? '(Pre-built)' : '' }}
               </option>
             </select>
-            <p class="form-hint">This API key will be specific to the selected agent</p>
+            <p class="form-hint">Select an agent for agent-specific key, or leave as "All Agents" for universal key</p>
           </div>
           <div class="form-group">
             <label for="key-name">Name *</label>
@@ -165,6 +186,34 @@
               :min="minDate"
             />
           </div>
+          <div class="form-group">
+            <label>Domain Whitelisting (Optional)</label>
+            <div class="whitelist-container">
+              <div class="whitelist-info">
+                <p class="form-hint">By default, API key works from any domain. Add domains to restrict usage.</p>
+                <p class="form-hint-small">Format: https://example.com (no ports, no paths)</p>
+              </div>
+              <div class="whitelist-input-group">
+                <input
+                  v-model="newOriginInput"
+                  type="text"
+                  placeholder="https://example.com"
+                  class="form-input"
+                  @keyup.enter="addOrigin"
+                />
+                <button type="button" @click="addOrigin" class="btn-secondary-small">Add</button>
+              </div>
+              <div v-if="newKeyForm.allowed_origins && newKeyForm.allowed_origins.length > 0" class="whitelist-list">
+                <div v-for="(origin, index) in newKeyForm.allowed_origins" :key="index" class="whitelist-item">
+                  <span class="origin-text">{{ origin }}</span>
+                  <button type="button" @click="removeOrigin(index)" class="btn-remove-small">×</button>
+                </div>
+              </div>
+              <div v-else class="whitelist-empty">
+                <p class="form-hint-small">No restrictions - key works from any domain</p>
+              </div>
+            </div>
+          </div>
           <div class="form-group" v-if="selectedAgentForUrl">
             <label>API Endpoint URL</label>
             <div class="url-preview">
@@ -181,7 +230,7 @@
           </div>
           <div class="modal-actions">
             <button type="button" @click="closeCreateModal" class="btn-secondary-modal">Cancel</button>
-            <button type="submit" :disabled="apiKeysStore.isLoading || !newKeyForm.agent_id" class="btn-primary-modal">
+            <button type="submit" :disabled="apiKeysStore.isLoading || !newKeyForm.name" class="btn-primary-modal">
               <span v-if="apiKeysStore.isLoading">Creating...</span>
               <span v-else>Create Key</span>
             </button>
@@ -228,6 +277,86 @@
         </div>
         <div class="modal-actions">
           <button @click="closeKeyDisplay" class="btn-primary-modal">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit API Key Modal -->
+    <div v-if="showEditModal && editingKey" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Edit API Key</h2>
+          <button @click="closeEditModal" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <form @submit.prevent="handleUpdateKey">
+            <div class="form-group">
+              <label for="edit-name">Name *</label>
+              <input
+                id="edit-name"
+                v-model="editForm.name"
+                type="text"
+                required
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label for="edit-rate-limit">Rate Limit (requests per minute)</label>
+              <input
+                id="edit-rate-limit"
+                v-model.number="editForm.rate_limit_per_minute"
+                type="number"
+                min="1"
+                max="1000"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  v-model="editForm.is_active"
+                  class="form-checkbox"
+                />
+                Active
+              </label>
+            </div>
+            <div class="form-group">
+              <label>Domain Whitelisting</label>
+              <div class="whitelist-container">
+                <div class="whitelist-info">
+                  <p class="form-hint">Add domains to restrict usage. Leave empty to allow all domains.</p>
+                  <p class="form-hint-small">Format: https://example.com (no ports, no paths)</p>
+                </div>
+                <div class="whitelist-input-group">
+                  <input
+                    v-model="editOriginInput"
+                    type="text"
+                    placeholder="https://example.com"
+                    class="form-input"
+                    @keyup.enter="addEditOrigin"
+                  />
+                  <button type="button" @click="addEditOrigin" class="btn-secondary-small">Add</button>
+                </div>
+                <div v-if="editForm.allowed_origins && editForm.allowed_origins.length > 0" class="whitelist-list">
+                  <div v-for="(origin, index) in editForm.allowed_origins" :key="index" class="whitelist-item">
+                    <span class="origin-text">{{ origin }}</span>
+                    <button type="button" @click="removeEditOrigin(index)" class="btn-remove-small">×</button>
+                  </div>
+                </div>
+                <div v-else class="whitelist-empty">
+                  <p class="form-hint-small">No restrictions - key works from any domain</p>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" @click="closeEditModal" class="btn-secondary-modal">Cancel</button>
+              <button type="submit" :disabled="apiKeysStore.isLoading" class="btn-primary-modal">
+                <span v-if="apiKeysStore.isLoading">Updating...</span>
+                <span v-else>Update Key</span>
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -290,8 +419,20 @@ const newKeyForm = ref({
   agent_id: '',
   name: '',
   rate_limit_per_minute: 60,
-  expires_at: ''
+  expires_at: '',
+  allowed_origins: [] as string[]
 })
+
+const newOriginInput = ref('')
+const showEditModal = ref(false)
+const editingKey = ref<ApiKey | null>(null)
+const editForm = ref({
+  name: '',
+  allowed_origins: [] as string[],
+  is_active: true,
+  rate_limit_per_minute: 60
+})
+const editOriginInput = ref('')
 
 const availableAgents = computed(() => {
   return agentsStore.agents.filter(agent => agent.is_prebuilt || agent.user_id === agentsStore.agents[0]?.user_id)
@@ -315,7 +456,8 @@ onMounted(async () => {
   ])
 })
 
-function getAgentName(agentId: string): string {
+function getAgentName(agentId: string | null): string {
+  if (!agentId) return ''
   const agent = agentsStore.agents.find(a => a.id === agentId)
   return agent?.name || 'Unknown Agent'
 }
@@ -340,25 +482,159 @@ function closeCreateModal() {
     agent_id: '',
     name: '',
     rate_limit_per_minute: 60,
-    expires_at: ''
+    expires_at: '',
+    allowed_origins: []
+  }
+  newOriginInput.value = ''
+}
+
+function addOrigin() {
+  const origin = newOriginInput.value.trim()
+  if (!origin) return
+  
+  // Basic validation
+  const originPattern = /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
+  if (!originPattern.test(origin)) {
+    alert('Invalid origin format. Must be like https://example.com (no ports, no paths)')
+    return
+  }
+  
+  // Check for ports
+  if (origin.split('://')[1].includes(':')) {
+    alert('Origin must not include port. Use format: https://example.com')
+    return
+  }
+  
+  const normalized = origin.replace(/\/$/, '').toLowerCase()
+  if (!newKeyForm.value.allowed_origins) {
+    newKeyForm.value.allowed_origins = []
+  }
+  
+  // Check for duplicates
+  if (newKeyForm.value.allowed_origins.some(o => o.toLowerCase() === normalized)) {
+    alert('This origin is already added')
+    return
+  }
+  
+  newKeyForm.value.allowed_origins.push(origin.replace(/\/$/, ''))
+  newOriginInput.value = ''
+}
+
+function removeOrigin(index: number) {
+  if (newKeyForm.value.allowed_origins) {
+    newKeyForm.value.allowed_origins.splice(index, 1)
+  }
+}
+
+function editKey(key: ApiKey) {
+  editingKey.value = key
+  editForm.value = {
+    name: key.name,
+    allowed_origins: key.allowed_origins ? [...key.allowed_origins] : [],
+    is_active: key.is_active,
+    rate_limit_per_minute: key.rate_limit_per_minute
+  }
+  editOriginInput.value = ''
+  showEditModal.value = true
+}
+
+function closeEditModal() {
+  showEditModal.value = false
+  editingKey.value = null
+  editForm.value = {
+    name: '',
+    allowed_origins: [],
+    is_active: true,
+    rate_limit_per_minute: 60
+  }
+  editOriginInput.value = ''
+}
+
+function addEditOrigin() {
+  const origin = editOriginInput.value.trim()
+  if (!origin) return
+  
+  // Basic validation
+  const originPattern = /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
+  if (!originPattern.test(origin)) {
+    alert('Invalid origin format. Must be like https://example.com (no ports, no paths)')
+    return
+  }
+  
+  // Check for ports
+  if (origin.split('://')[1].includes(':')) {
+    alert('Origin must not include port. Use format: https://example.com')
+    return
+  }
+  
+  const normalized = origin.replace(/\/$/, '').toLowerCase()
+  if (!editForm.value.allowed_origins) {
+    editForm.value.allowed_origins = []
+  }
+  
+  // Check for duplicates
+  if (editForm.value.allowed_origins.some(o => o.toLowerCase() === normalized)) {
+    alert('This origin is already added')
+    return
+  }
+  
+  editForm.value.allowed_origins.push(origin.replace(/\/$/, ''))
+  editOriginInput.value = ''
+}
+
+function removeEditOrigin(index: number) {
+  if (editForm.value.allowed_origins) {
+    editForm.value.allowed_origins.splice(index, 1)
+  }
+}
+
+async function handleUpdateKey() {
+  if (!editingKey.value) return
+  
+  try {
+    const updateData: any = {
+      name: editForm.value.name,
+      is_active: editForm.value.is_active,
+      rate_limit_per_minute: editForm.value.rate_limit_per_minute,
+      allowed_origins: editForm.value.allowed_origins.length > 0 ? editForm.value.allowed_origins : null
+    }
+    
+    await apiKeysStore.updateApiKey(editingKey.value.id, updateData)
+    closeEditModal()
+  } catch (error: any) {
+    console.error('Failed to update API key:', error)
+    alert(error.response?.data?.detail || 'Failed to update API key. Please try again.')
   }
 }
 
 async function handleCreateKey() {
-  if (!newKeyForm.value.agent_id) {
-    alert('Please select an agent')
+  if (!newKeyForm.value.name) {
+    alert('Please enter a name for the API key')
     return
   }
   
   try {
     const data: any = {
-      agent_id: newKeyForm.value.agent_id,
       name: newKeyForm.value.name,
       rate_limit_per_minute: newKeyForm.value.rate_limit_per_minute || 60
     }
     
+    // Only include agent_id if selected (not empty string)
+    if (newKeyForm.value.agent_id) {
+      data.agent_id = newKeyForm.value.agent_id
+    } else {
+      data.agent_id = null // Universal key
+    }
+    
     if (newKeyForm.value.expires_at) {
       data.expires_at = new Date(newKeyForm.value.expires_at).toISOString()
+    }
+    
+    // Include allowed_origins only if there are any
+    if (newKeyForm.value.allowed_origins && newKeyForm.value.allowed_origins.length > 0) {
+      data.allowed_origins = newKeyForm.value.allowed_origins
+    } else {
+      data.allowed_origins = null // Allow all origins
     }
     
     const created = await apiKeysStore.createApiKey(data)

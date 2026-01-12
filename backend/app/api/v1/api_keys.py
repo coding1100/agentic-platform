@@ -8,7 +8,7 @@ from app.core.dependencies import get_current_user
 from app.core.security import generate_api_key, hash_api_key
 from app.models.user import User
 from app.models.api_key import ApiKey
-from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyUsageStats
+from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyUsageStats, ApiKeyUpdate
 
 router = APIRouter()
 
@@ -29,22 +29,27 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new API key for a specific agent."""
-    # Verify agent ownership or prebuilt access
-    from app.models.agent import Agent
-    agent = db.query(Agent).filter(
-        Agent.id == api_key_data.agent_id,
-        (
-            (Agent.user_id == current_user.id)
-            | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
-        ),
-    ).first()
+    """Create a new API key. If agent_id is null, creates a universal key for all agents."""
+    agent = None
+    agent_slug = None
     
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found or you don't have access to it"
-        )
+    # If agent_id is provided, verify agent ownership or prebuilt access
+    if api_key_data.agent_id:
+        from app.models.agent import Agent
+        agent = db.query(Agent).filter(
+            Agent.id == api_key_data.agent_id,
+            (
+                (Agent.user_id == current_user.id)
+                | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
+            ),
+        ).first()
+        
+        if not agent:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent not found or you don't have access to it"
+            )
+        agent_slug = agent.slug
     
     # Generate new API key
     plain_key = generate_api_key()
@@ -53,11 +58,12 @@ async def create_api_key(
     # Create API key record
     api_key = ApiKey(
         user_id=current_user.id,
-        agent_id=api_key_data.agent_id,
+        agent_id=api_key_data.agent_id,  # Can be None for universal keys
         key_hash=key_hash,
         name=api_key_data.name,
         expires_at=api_key_data.expires_at,
         rate_limit_per_minute=api_key_data.rate_limit_per_minute,
+        allowed_origins=api_key_data.allowed_origins,  # Can be None for allow all
     )
     db.add(api_key)
     db.commit()
@@ -74,8 +80,9 @@ async def create_api_key(
         created_at=api_key.created_at,
         rate_limit_per_minute=api_key.rate_limit_per_minute,
         total_requests=api_key.total_requests,
+        allowed_origins=api_key.allowed_origins,
         key=plain_key,  # Include plain key only on creation
-        agent_slug=agent.slug  # Include agent slug for URL generation
+        agent_slug=agent_slug  # Include agent slug for URL generation (null for universal keys)
     )
     
     return response
@@ -173,6 +180,7 @@ async def toggle_api_key(
         created_at=api_key.created_at,
         rate_limit_per_minute=api_key.rate_limit_per_minute,
         total_requests=api_key.total_requests,
+        allowed_origins=api_key.allowed_origins,
         agent_slug=agent.slug if agent else None
     )
 
@@ -209,5 +217,59 @@ async def get_api_key_usage(
         last_used_at=api_key.last_used_at,
         requests_today=requests_today,
         requests_this_month=requests_this_month
+    )
+
+
+@router.patch("/{api_key_id}", response_model=ApiKeyResponse)
+async def update_api_key(
+    api_key_id: UUID,
+    update_data: ApiKeyUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update an API key (name, allowed origins, active status, rate limit)."""
+    from app.models.agent import Agent
+    
+    api_key = db.query(ApiKey).filter(
+        ApiKey.id == api_key_id,
+        ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    # Update fields if provided
+    if update_data.name is not None:
+        api_key.name = update_data.name
+    
+    if update_data.is_active is not None:
+        api_key.is_active = update_data.is_active
+    
+    if update_data.rate_limit_per_minute is not None:
+        api_key.rate_limit_per_minute = update_data.rate_limit_per_minute
+    
+    # Handle allowed_origins: empty list means allow all (set to None)
+    if update_data.allowed_origins is not None:
+        api_key.allowed_origins = update_data.allowed_origins if len(update_data.allowed_origins) > 0 else None
+    
+    db.commit()
+    db.refresh(api_key)
+    
+    agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
+    return ApiKeyResponse(
+        id=api_key.id,
+        agent_id=api_key.agent_id,
+        name=api_key.name,
+        is_active=api_key.is_active,
+        last_used_at=api_key.last_used_at,
+        expires_at=api_key.expires_at,
+        created_at=api_key.created_at,
+        rate_limit_per_minute=api_key.rate_limit_per_minute,
+        total_requests=api_key.total_requests,
+        allowed_origins=api_key.allowed_origins,
+        agent_slug=agent.slug if agent else None
     )
 

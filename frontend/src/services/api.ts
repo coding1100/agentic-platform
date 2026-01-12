@@ -218,6 +218,11 @@ export const apiKeysApi = {
   async getUsage(apiKeyId: string): Promise<ApiKeyUsageStats> {
     const response = await apiClient.get(`/api/v1/api-keys/${apiKeyId}/usage`)
     return response.data
+  },
+
+  async update(apiKeyId: string, data: ApiKeyUpdate): Promise<ApiKey> {
+    const response = await apiClient.patch(`/api/v1/api-keys/${apiKeyId}`, data)
+    return response.data
   }
 }
 

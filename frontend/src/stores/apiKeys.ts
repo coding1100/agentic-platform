@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { apiKeysApi } from '@/services/api'
-import type { ApiKey, ApiKeyCreate, ApiKeyUsageStats } from '@/types'
+import type { ApiKey, ApiKeyCreate, ApiKeyUpdate, ApiKeyUsageStats } from '@/types'
 
 export const useApiKeysStore = defineStore('apiKeys', () => {
   const apiKeys = ref<ApiKey[]>([])
@@ -74,6 +74,21 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
     }
   }
 
+  async function updateApiKey(apiKeyId: string, data: ApiKeyUpdate): Promise<ApiKey> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const updated = await apiKeysApi.update(apiKeyId, data)
+      await fetchApiKeys() // Refresh list
+      return updated
+    } catch (err: any) {
+      error.value = err.response?.data?.detail || 'Failed to update API key'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     apiKeys,
     isLoading,
@@ -82,7 +97,8 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
     createApiKey,
     deleteApiKey,
     toggleApiKey,
-    getUsageStats
+    getUsageStats,
+    updateApiKey
   }
 })
 
