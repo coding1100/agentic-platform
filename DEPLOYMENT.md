@@ -159,19 +159,26 @@ apt-get install -y nginx certbot python3-certbot-nginx
 
 ```bash
 # Copy nginx config (adjust path to your repository location)
-cp /var/www/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
+cp /root/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
 # Or if you used a different path:
-# cp /opt/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
+# cp ~/agentic-platform/nginx/agentic-platform.conf /etc/nginx/sites-available/agentic-platform
 
-# Edit the config to proxy to Docker containers
-nano /etc/nginx/sites-available/agentic-platform
+# Enable site
+ln -s /etc/nginx/sites-available/agentic-platform /etc/nginx/sites-enabled/
+
+# Test configuration
+nginx -t
 ```
 
-The nginx config file (`nginx/agentic-platform.conf`) is already configured to proxy to Docker containers. It only contains HTTP (port 80) configuration - no SSL. Certbot will automatically add SSL configuration later.
+The nginx config file (`nginx/agentic-platform.conf`) includes:
+- Complete SSL configuration (for use after certbot setup)
+- HTTP to HTTPS redirect
+- Proxy configuration for Docker containers
 
 The config proxies:
-- `/` → Frontend container (port 80)
-- `/api` → Backend container (port 8009)
+- `/` → Frontend container (port 8080)
+- `/api` → Backend container (port 8010)
+- `/health` → Backend health endpoint
 
 ```bash
 # Enable site
