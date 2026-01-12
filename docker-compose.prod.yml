@@ -42,7 +42,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://agentic-platform.namatechnologlies.com/api}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://agentic-platform.namatechnologlies.com}
     container_name: agentic_platform_frontend
     ports:
       - "${FRONTEND_PORT:-8080}:80"  # Changed to 8080 to avoid conflict with port 80
