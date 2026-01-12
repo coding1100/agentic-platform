@@ -103,11 +103,12 @@ GEMINI_API_KEY=your-gemini-api-key
 CORS_ORIGINS=["https://agentic-platform.namatechnologlies.com"]
 CORS_ORIGINS_API=["*"]
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
-BACKEND_PORT=8009
+BACKEND_PORT=8010
 
 # Frontend
 VITE_API_BASE_URL=https://agentic-platform.namatechnologlies.com/api
-FRONTEND_PORT=80
+FRONTEND_PORT=808080
+BACKEND_PORT=8010
 ```
 
 Generate a secure SECRET_KEY:
@@ -435,9 +436,9 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ### Optional Variables
 
-- `POSTGRES_PORT`: PostgreSQL port (default: 5432)
-- `BACKEND_PORT`: Backend port (default: 8009)
-- `FRONTEND_PORT`: Frontend port (default: 80)
+- `POSTGRES_PORT`: PostgreSQL port (default: 5432, internal only in production)
+- `BACKEND_PORT`: Backend port mapped to host (default: 8010, to avoid conflict with port 8009)
+- `FRONTEND_PORT`: Frontend port mapped to host (default: 8080, to avoid conflict with port 80)
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: JWT token expiration (default: 10080)
 
 ## Security Checklist

@@ -40,17 +40,23 @@ jobs:
             git checkout main || git checkout -b main
             git pull origin main || git reset --hard origin/main
             
-            # Note: .env file will be automatically loaded by docker-compose
-            # No need to export it here
+            # Set port environment variables to avoid conflicts
+            # These will override any values in .env file
+            export FRONTEND_PORT=8080
+            export BACKEND_PORT=8010
             
             # Run Docker-based deployment directly
-            echo "Stopping existing containers..."
+            echo "Stopping and removing existing containers..."
             docker-compose -f docker-compose.prod.yml down || true
+            
+            # Remove any containers that might be using the ports
+            docker stop agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
+            docker rm agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
             
             echo "Building containers..."
             docker-compose -f docker-compose.prod.yml build --no-cache
             
-            echo "Starting containers..."
+            echo "Starting containers with ports: Frontend=8080, Backend=8010..."
             docker-compose -f docker-compose.prod.yml up -d
             
             echo "Waiting for services to start..."
