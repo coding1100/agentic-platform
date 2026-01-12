@@ -138,6 +138,15 @@ class LangchainAgentService:
         from app.tools.prebuilt_agents import _generate_quiz
         try:
           quiz_output = _generate_quiz(topic=topic, difficulty=difficulty, num_questions=num_questions)
+          # Remove answers from quiz output before displaying to users
+          # Answers are kept in backend for validation but hidden from users
+          # Remove **Answer:** lines
+          quiz_output = re.sub(r'\*\*Answer:\*\*\s*[A-D]\s*\n?', '', quiz_output, flags=re.IGNORECASE)
+          # Remove Answer: lines (without bold)
+          quiz_output = re.sub(r'Answer:\s*[A-D]\s*\n?', '', quiz_output, flags=re.IGNORECASE)
+          # Clean up any double newlines that might result
+          quiz_output = re.sub(r'\n{3,}', '\n\n', quiz_output)
+          quiz_output = quiz_output.strip()
           return quiz_output
         except Exception as e:
           # Fallback to normal generation if tool fails
@@ -174,6 +183,17 @@ class LangchainAgentService:
           quiz_start = output.find("Question 1:")
         if quiz_start > 0:
           output = output[quiz_start:].strip()
+        
+        # Remove answers from quiz output before displaying to users
+        # Answers are kept in backend for validation but hidden from users
+        import re
+        # Remove **Answer:** lines
+        output = re.sub(r'\*\*Answer:\*\*\s*[A-D]\s*\n?', '', output, flags=re.IGNORECASE)
+        # Remove Answer: lines (without bold)
+        output = re.sub(r'Answer:\s*[A-D]\s*\n?', '', output, flags=re.IGNORECASE)
+        # Clean up any double newlines that might result
+        output = re.sub(r'\n{3,}', '\n\n', output)
+        output = output.strip()
       
       return output
       

@@ -1411,5 +1411,195 @@ h1 {
   color: #666;
   font-weight: 500;
 }
+
+/* Domain Whitelisting Styles */
+.whitelist-container {
+  margin-top: 12px;
+  padding: 20px;
+  background: rgba(102, 126, 234, 0.05);
+  border: 1px solid rgba(102, 126, 234, 0.15);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.whitelist-container:hover {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: rgba(102, 126, 234, 0.25);
+}
+
+.whitelist-info {
+  margin-bottom: 16px;
+}
+
+.whitelist-info .form-hint {
+  margin: 0 0 8px 0;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.whitelist-info .form-hint-small {
+  margin: 0;
+  color: #888;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.whitelist-input-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  align-items: stretch;
+}
+
+.whitelist-input-group .form-input {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 14px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  background: white;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.whitelist-input-group .form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.whitelist-input-group .form-input::placeholder {
+  color: #999;
+}
+
+.btn-secondary-small {
+  padding: 12px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.btn-secondary-small:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-secondary-small:active {
+  transform: translateY(0);
+}
+
+.btn-secondary-small:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.whitelist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.whitelist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: white;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.whitelist-item:hover {
+  border-color: rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+  transform: translateX(2px);
+}
+
+.origin-text {
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.btn-remove-small {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.2);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-left: 12px;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-remove-small:hover {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.4);
+  transform: scale(1.1);
+}
+
+.btn-remove-small:active {
+  transform: scale(0.95);
+}
+
+.whitelist-empty {
+  padding: 16px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px dashed rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  margin-top: 12px;
+}
+
+.whitelist-empty .form-hint-small {
+  margin: 0;
+  color: #888;
+  font-size: 13px;
+  font-style: italic;
+  background: transparent;
+  padding: 0;
+}
+
+.origin-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'Courier New', monospace;
+  margin-right: 6px;
+  margin-bottom: 4px;
+}
 </style>
 

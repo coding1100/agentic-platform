@@ -19,16 +19,11 @@
           <div
             v-for="option in question.options"
             :key="option.letter"
-            :class="['option', { 'correct': question.answer === option.letter }]"
+            class="option"
           >
             <span class="option-letter">{{ option.letter }})</span>
             <span class="option-text">{{ option.text }}</span>
           </div>
-        </div>
-        
-        <div v-if="question.answer" class="question-answer">
-          <span class="answer-label">Answer:</span>
-          <span class="answer-value">{{ question.answer }}</span>
         </div>
       </div>
     </div>
@@ -129,11 +124,6 @@ const parsed = computed<ParsedQuiz>(() => parseQuiz(props.content))
   border-color: rgba(255, 255, 255, 0.25);
 }
 
-.option.correct {
-  background: rgba(76, 175, 80, 0.2);
-  border-color: rgba(76, 175, 80, 0.4);
-}
-
 .option-letter {
   font-weight: 700;
   color: rgba(255, 255, 255, 0.9);
@@ -144,29 +134,6 @@ const parsed = computed<ParsedQuiz>(() => parseQuiz(props.content))
   flex: 1;
   color: rgba(255, 255, 255, 0.9);
   line-height: 1.5;
-}
-
-.question-answer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: rgba(76, 175, 80, 0.15);
-  border: 1px solid rgba(76, 175, 80, 0.3);
-  border-radius: 8px;
-  margin-top: 12px;
-}
-
-.answer-label {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.answer-value {
-  font-weight: 700;
-  font-size: 18px;
-  color: #4caf50;
-  text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
 }
 
 @media (max-width: 768px) {

@@ -143,12 +143,42 @@
           <h2>Authentication</h2>
           <p class="section-description">
             All requests require an API key in the <code>X-API-Key</code> header. 
-            API keys are agent-specific and can be created from the API Keys page.
+            API keys can be created from the API Keys page in your dashboard.
           </p>
           <div class="code-block">
             <code>X-API-Key: your_api_key_here</code>
             <button 
               @click="copyToClipboard('X-API-Key: your_api_key_here', false)" 
+              class="btn-copy-inline"
+            >
+              📋
+            </button>
+          </div>
+          <h4>API Key Types</h4>
+          <ul class="docs-notes">
+            <li><strong>Universal Keys:</strong> Work with all agents. Create by leaving the agent selection as "All Agents" when creating a key.</li>
+            <li><strong>Agent-Specific Keys:</strong> Work only with a specific agent. More secure but less flexible.</li>
+            <li><strong>Domain Whitelisting:</strong> Optional security feature. Restrict API key usage to specific domains (e.g., <code>https://yourdomain.com</code>). Leave empty to allow all domains.</li>
+          </ul>
+        </section>
+
+        <!-- Quick Start Section -->
+        <section class="docs-section-main">
+          <h2>Quick Start Guide</h2>
+          <p class="section-description">
+            Get started in 3 simple steps:
+          </p>
+          <ol class="flow-list">
+            <li><strong>Create an API Key:</strong> Go to the API Keys page and create a new key (universal or agent-specific)</li>
+            <li><strong>Choose an Agent:</strong> Select the agent slug you want to use (e.g., <code>education.personal_tutor</code>)</li>
+            <li><strong>Make Your First Request:</strong> Send a POST request to the chat endpoint with your API key</li>
+          </ol>
+          
+          <h4>Complete Example (JavaScript)</h4>
+          <div class="code-block">
+            <pre class="js-example">{{ getQuickStartExample() }}</pre>
+            <button 
+              @click="copyToClipboard(getQuickStartExample(), false)" 
               class="btn-copy-inline"
             >
               📋
@@ -209,6 +239,69 @@
   "message": "Agent's response text",
   "agent_id": "uuid-string"
 }, null, 2) }}</pre>
+          </div>
+          <p class="docs-note">
+            <strong>Response Format:</strong> The <code>message</code> field contains the agent's response. 
+            For quizzes, the response will be formatted with <code>**Question N:**</code> markers. 
+            Always save the <code>conversation_id</code> from the response to maintain context in subsequent requests.
+          </p>
+        </section>
+
+        <!-- Response Parsing Section -->
+        <section class="docs-section-main">
+          <h2>Parsing Responses</h2>
+          
+          <h3>Quiz Response Format</h3>
+          <p class="section-description">
+            When requesting a quiz, the response contains all questions in a structured format:
+          </p>
+          <div class="code-block">
+            <pre class="json-example">{{ getQuizResponseExample() }}</pre>
+            <button 
+              @click="copyToClipboard(getQuizResponseExample(), false)" 
+              class="btn-copy-inline"
+            >
+              📋
+            </button>
+          </div>
+          
+          <h4>Parsing Quiz Questions (JavaScript Example)</h4>
+          <div class="code-block">
+            <pre class="js-example">{{ getQuizParserExample() }}</pre>
+            <button 
+              @click="copyToClipboard(getQuizParserExample(), false)" 
+              class="btn-copy-inline"
+            >
+              📋
+            </button>
+          </div>
+
+          <h3>General Response Format</h3>
+          <p class="section-description">
+            For non-quiz responses, the <code>message</code> field contains plain text that you can display directly to users. 
+            The agent maintains conversation context, so responses may reference previous messages in the conversation.
+          </p>
+        </section>
+
+        <!-- Workflow Examples Section -->
+        <section class="docs-section-main">
+          <h2>Complete Workflow Examples</h2>
+          
+          <div class="agent-flow-section">
+            <h3>Example: Personal Tutor - Complete Learning Session</h3>
+            <div class="code-block">
+              <pre class="js-example">{{ getCompleteWorkflowExample() }}</pre>
+              <button 
+                @click="copyToClipboard(getCompleteWorkflowExample(), false)" 
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+            <p class="docs-note">
+              This example shows a complete learning session: starting a conversation, asking for explanations, 
+              requesting a quiz, and maintaining context throughout.
+            </p>
           </div>
         </section>
 
@@ -278,8 +371,36 @@
             <li><strong>Rate Limits:</strong> Each API key has a configurable rate limit (default: 60 requests/minute). Exceeding the limit will result in a 429 error.</li>
             <li><strong>Security:</strong> Keep your API keys secure. They are shown only once when created. If lost, you'll need to create a new key.</li>
             <li><strong>Error Handling:</strong> The API returns standard HTTP status codes. Check the response status before processing the body.</li>
-            <li><strong>Base URL:</strong> Make sure to use the correct base URL. For development: <code>http://localhost:8009</code></li>
+            <li><strong>Base URL:</strong> Make sure to use the correct base URL. For production: <code>https://agentic-platform.namatechnologlies.com</code>, for development: <code>http://localhost:8009</code></li>
+            <li><strong>Domain Whitelisting:</strong> If you've configured domain whitelisting for your API key, ensure requests include the <code>Origin</code> header matching your whitelisted domain.</li>
+            <li><strong>Quiz Generation:</strong> Quiz requests generate ALL questions in a single API call for efficiency. No need to make multiple requests.</li>
+            <li><strong>Response Time:</strong> Agent responses typically take 2-10 seconds depending on complexity. Quiz generation may take 5-15 seconds for complete quizzes.</li>
           </ul>
+        </section>
+
+        <!-- Getting Started Section -->
+        <section class="docs-section-main">
+          <h2>Getting Agent Information</h2>
+          <p class="section-description">
+            To get a list of available agents and their slugs, you can use the following endpoint:
+          </p>
+          <div class="endpoint-info">
+            <code class="method-badge">GET</code>
+            <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents</code>
+          </div>
+          <div class="code-block">
+            <pre class="json-example">{{ getListAgentsExample() }}</pre>
+            <button 
+              @click="copyToClipboard(getListAgentsExample(), false)" 
+              class="btn-copy-inline"
+            >
+              📋
+            </button>
+          </div>
+          <p class="docs-note">
+            This endpoint returns a list of all available pre-built agents with their slugs, names, and descriptions. 
+            Use the <code>slug</code> field in your chat requests.
+          </p>
         </section>
 
         <!-- Error Codes Section -->
@@ -449,6 +570,190 @@ Body: {
 // 4. Grammar practice
 // 5. Conversation scenarios
 // Maintain conversation_id throughout to preserve progress`
+}
+
+function getQuickStartExample(): string {
+  return `// Step 1: Make your first API call
+const response = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
+  method: "POST",
+  headers: {
+    "X-API-Key": "your_api_key_here",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    conversation_id: null,  // Creates new conversation
+    message: "Hello, I want to learn about algebra"
+  })
+});
+
+const data = await response.json();
+console.log("Conversation ID:", data.conversation_id);
+console.log("Agent Response:", data.message);
+
+// Step 2: Continue the conversation using the same conversation_id
+const response2 = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
+  method: "POST",
+  headers: {
+    "X-API-Key": "your_api_key_here",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    conversation_id: data.conversation_id,  // Use ID from previous response
+    message: "Can you generate a quiz with 5 questions?"
+  })
+});
+
+const data2 = await response2.json();
+console.log("Quiz:", data2.message);`
+}
+
+function getQuizResponseExample(): string {
+  return `{
+  "conversation_id": "uuid-string",
+  "message": "**Question 1:** What is 2 + 2?\nA) 3\nB) 4\nC) 5\nD) 6\n**Answer:** B\n\n**Question 2:** What is the capital of France?\nA) London\nB) Berlin\nC) Paris\nD) Madrid\n**Answer:** C\n\n[More questions...]",
+  "agent_id": "uuid-string"
+}`
+}
+
+function getQuizParserExample(): string {
+  return `// Parse quiz response
+function parseQuiz(quizText) {
+  const questions = [];
+  const questionRegex = /\\*\\*Question (\\d+):\\*\\*\\s*([^\\*]+?)(?=\\*\\*Question|\\*\\*Answer:|$)/gs;
+  const answerRegex = /\\*\\*Answer:\\*\\*\\s*([A-D])/g;
+  
+  let match;
+  while ((match = questionRegex.exec(quizText)) !== null) {
+    const questionNum = parseInt(match[1]);
+    const questionText = match[2].trim();
+    
+    // Extract options (A), B), C), D))
+    const options = [];
+    const optionRegex = /^([A-D])\\)\\s*(.+)$/gm;
+    let optionMatch;
+    while ((optionMatch = optionRegex.exec(questionText)) !== null) {
+      options.push({
+        letter: optionMatch[1],
+        text: optionMatch[2].trim()
+      });
+    }
+    
+    // Find answer
+    const answerMatch = quizText.substring(match.index).match(/\\*\\*Answer:\\*\\*\\s*([A-D])/);
+    const answer = answerMatch ? answerMatch[1] : null;
+    
+    questions.push({
+      number: questionNum,
+      question: questionText.split(/^[A-D]\\)/gm)[0].trim(),
+      options: options,
+      answer: answer
+    });
+  }
+  
+  return questions;
+}
+
+// Usage
+const response = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
+  method: "POST",
+  headers: {
+    "X-API-Key": "your_api_key_here",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    conversation_id: null,
+    message: "Generate a quiz about math with 5 questions"
+  })
+});
+
+const data = await response.json();
+const questions = parseQuiz(data.message);
+console.log("Parsed questions:", questions);`
+}
+
+function getCompleteWorkflowExample(): string {
+  return `// Complete workflow: Learning session with Personal Tutor
+async function learningSession() {
+  const apiKey = "your_api_key_here";
+  const baseUrl = "${baseUrl.value}";
+  let conversationId = null;
+  
+  // Step 1: Start conversation
+  let response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      conversation_id: null,
+      message: "I want to learn about photosynthesis"
+    })
+  });
+  let data = await response.json();
+  conversationId = data.conversation_id;
+  console.log("Agent:", data.message);
+  
+  // Step 2: Ask for explanation
+  response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      conversation_id: conversationId,  // Maintain context
+      message: "Can you explain how photosynthesis works step by step?"
+    })
+  });
+  data = await response.json();
+  console.log("Explanation:", data.message);
+  
+  // Step 3: Request a quiz
+  response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      conversation_id: conversationId,  // Same conversation
+      message: "Generate a quiz about photosynthesis with 5 multiple choice questions at medium difficulty"
+    })
+  });
+  data = await response.json();
+  console.log("Quiz:", data.message);
+  // Parse and display quiz questions...
+}
+
+learningSession();`
+}
+
+function getListAgentsExample(): string {
+  return `// Get list of available agents
+GET ${baseUrl.value}/api/v1/public/agents
+Headers: {
+  "X-API-Key": "your_api_key_here"
+}
+
+// Response:
+[
+  {
+    "id": "uuid",
+    "name": "Personal Tutor",
+    "slug": "education.personal_tutor",
+    "description": "One-on-one tutor that explains concepts...",
+    "category": "education"
+  },
+  {
+    "id": "uuid",
+    "name": "Course Creation Agent",
+    "slug": "education.course_creation_agent",
+    "description": "A personal tutor agent that guides...",
+    "category": "education"
+  },
+  // ... more agents
+]`
 }
 
 async function copyToClipboard(text: string) {
