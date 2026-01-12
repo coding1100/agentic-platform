@@ -14,8 +14,110 @@
           <h2>Overview</h2>
           <p class="section-description">
             This API allows external platforms to interact with AI agents through REST endpoints. 
-            Each API key is <strong>agent-specific</strong>, meaning it can only be used with the agent it was created for.
+            Our pre-built agents are <strong>not simple chatbots</strong> - they follow structured workflows 
+            and guide users through multi-step processes. Each agent maintains conversation context 
+            and provides personalized, tutor-like interactions.
           </p>
+          <p class="section-description">
+            <strong>Important:</strong> API keys can now be <strong>universal</strong> (work with all agents) 
+            or <strong>agent-specific</strong>. When creating a key, you can choose to make it universal 
+            or tie it to a specific agent.
+          </p>
+        </section>
+
+        <!-- Pre-built Agents Section -->
+        <section class="docs-section-main">
+          <h2>Pre-built Agents & Their Flows</h2>
+          
+          <div class="agent-flow-section">
+            <h3>1. Personal Tutor Agent</h3>
+            <p class="section-description">
+              <strong>Slug:</strong> <code>education.personal_tutor</code><br>
+              A one-on-one tutor that explains concepts step-by-step, creates practice quizzes, 
+              and builds study plans. This agent follows a structured learning flow.
+            </p>
+            
+            <h4>Typical Flow:</h4>
+            <ol class="flow-list">
+              <li><strong>Initial Greeting:</strong> Agent introduces itself and asks what the user wants to learn</li>
+              <li><strong>Topic Selection:</strong> User specifies a topic (e.g., "I want to learn about photosynthesis")</li>
+              <li><strong>Concept Explanation:</strong> Agent explains concepts step-by-step with check-point questions</li>
+              <li><strong>Practice Quiz:</strong> Agent generates quizzes with multiple questions in a single response</li>
+              <li><strong>Study Plan:</strong> Agent can create personalized study plans</li>
+            </ol>
+            
+            <h4>Example: Requesting a Quiz</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ getQuizExample() }}</pre>
+              <button @click="copyToClipboard(getQuizExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Note:</strong> The agent generates ALL quiz questions in a single API call. 
+              The response will contain all questions formatted as:<br>
+              <code>**Question 1:** [question] ... **Answer:** [letter]</code>
+            </p>
+          </div>
+
+          <div class="agent-flow-section">
+            <h3>2. Course Creation Agent</h3>
+            <p class="section-description">
+              <strong>Slug:</strong> <code>education.course_creation_agent</code><br>
+              A personal tutor that guides users through creating comprehensive courses with 
+              learning assessments, concept maps, workflow automation, and validation.
+            </p>
+            
+            <h4>Typical Flow:</h4>
+            <ol class="flow-list">
+              <li><strong>Discovery Phase:</strong> Agent asks about learning objectives, target audience, duration, format</li>
+              <li><strong>Structure Design:</strong> Agent creates course outline with modules and lessons</li>
+              <li><strong>Concept Mapping:</strong> Agent visualizes relationships between topics</li>
+              <li><strong>Assessment Design:</strong> Agent creates diagnostic, formative, and summative assessments</li>
+              <li><strong>Workflow Creation:</strong> Agent designs automated workflows for course delivery</li>
+              <li><strong>Validation:</strong> Agent validates content against educational standards</li>
+            </ol>
+            
+            <h4>Example: Starting Course Creation</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ getCourseCreationExample() }}</pre>
+              <button @click="copyToClipboard(getCourseCreationExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Important:</strong> Maintain the same <code>conversation_id</code> throughout the entire 
+              course creation process to preserve context and workflow state.
+            </p>
+          </div>
+
+          <div class="agent-flow-section">
+            <h3>3. Language Practice Agent</h3>
+            <p class="section-description">
+              <strong>Slug:</strong> <code>education.language_practice_agent</code><br>
+              A personal tutor that guides users through language learning with vocabulary, 
+              grammar, conversation, and pronunciation practice.
+            </p>
+            
+            <h4>Typical Flow:</h4>
+            <ol class="flow-list">
+              <li><strong>Language Selection:</strong> User chooses target language</li>
+              <li><strong>Placement Assessment:</strong> Agent assesses proficiency level (CEFR A1-C2)</li>
+              <li><strong>Goal Setting:</strong> Agent understands learning goals and time commitment</li>
+              <li><strong>Vocabulary Building:</strong> Agent creates vocabulary sets with spaced repetition</li>
+              <li><strong>Grammar Practice:</strong> Agent provides interactive grammar exercises</li>
+              <li><strong>Conversation Practice:</strong> Agent creates realistic dialogue scenarios</li>
+              <li><strong>Pronunciation Training:</strong> Agent provides pronunciation exercises</li>
+              <li><strong>Progress Tracking:</strong> Agent tracks progress with gamification (XP, levels, streaks)</li>
+            </ol>
+            
+            <h4>Example: Starting Language Learning</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ getLanguagePracticeExample() }}</pre>
+              <button @click="copyToClipboard(getLanguagePracticeExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> The agent maintains conversation context, so you can build on previous 
+              interactions. For example, after selecting a language, you can ask for vocabulary without 
+              repeating the language selection.
+            </p>
+          </div>
         </section>
 
         <!-- Base URL Section -->
@@ -32,7 +134,7 @@
           </div>
           <p class="docs-note">
             Replace <code>{agent_slug}</code> with your agent's slug. 
-            Available agents: <code>personal_tutor_agent</code>, <code>course_creation_agent</code>, <code>language_practice_agent</code>
+            Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>
           </p>
         </section>
 
@@ -171,7 +273,7 @@
         <section class="docs-section-main">
           <h2>Important Notes</h2>
           <ul class="docs-notes">
-            <li><strong>Agent-Specific Keys:</strong> Each API key is tied to a specific agent. Use the key only with the agent it was created for.</li>
+            <li><strong>Universal vs Agent-Specific Keys:</strong> API keys can be universal (work with all agents) or agent-specific. Universal keys are more flexible but agent-specific keys provide better security.</li>
             <li><strong>Conversation Context:</strong> Include the same <code>conversation_id</code> in subsequent requests to maintain conversation history.</li>
             <li><strong>Rate Limits:</strong> Each API key has a configurable rate limit (default: 60 requests/minute). Exceeding the limit will result in a 429 error.</li>
             <li><strong>Security:</strong> Keep your API keys secure. They are shown only once when created. If lost, you'll need to create a new key.</li>
@@ -282,6 +384,71 @@ const data = {
 axios.post(url, data, { headers })
   .then(response => console.log(response.data))
   .catch(error => console.error("Error:", error));`
+}
+
+function getQuizExample(): string {
+  return `// Request a quiz from Personal Tutor Agent
+POST ${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": "your_conversation_id_or_null",
+  "message": "Generate a quiz about photosynthesis with 5 multiple choice questions at medium difficulty level"
+}
+
+// Response contains ALL questions in one response:
+// **Question 1:** What is the primary pigment in photosynthesis?
+// A) Chlorophyll
+// B) Carotene
+// C) Xanthophyll
+// D) Anthocyanin
+// **Answer:** A
+// [All 5 questions follow...]`
+}
+
+function getCourseCreationExample(): string {
+  return `// Start course creation workflow
+POST ${baseUrl.value}/api/v1/public/agents/education.course_creation_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,  // New conversation
+  "message": "I want to create a course on Python programming for beginners"
+}
+
+// Agent will ask follow-up questions. Maintain conversation_id:
+// Next request:
+Body: {
+  "conversation_id": "conversation_id_from_previous_response",
+  "message": "The course should be 8 weeks long, for complete beginners"
+}
+
+// Continue the conversation to build the complete course structure`
+}
+
+function getLanguagePracticeExample(): string {
+  return `// Start language learning journey
+POST ${baseUrl.value}/api/v1/public/agents/education.language_practice_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "I want to learn Spanish"
+}
+
+// Agent will guide through:
+// 1. Proficiency assessment
+// 2. Goal setting
+// 3. Vocabulary building
+// 4. Grammar practice
+// 5. Conversation scenarios
+// Maintain conversation_id throughout to preserve progress`
 }
 
 async function copyToClipboard(text: string) {
@@ -579,6 +746,50 @@ h1 {
   color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
   flex: 1;
+}
+
+.agent-flow-section {
+  margin-bottom: 40px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.agent-flow-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.agent-flow-section h3 {
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.agent-flow-section h4 {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 24px 0 12px 0;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.flow-list {
+  margin: 16px 0;
+  padding-left: 24px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  line-height: 2;
+}
+
+.flow-list li {
+  margin-bottom: 12px;
+}
+
+.flow-list strong {
+  color: white;
+  font-weight: 600;
 }
 </style>
 

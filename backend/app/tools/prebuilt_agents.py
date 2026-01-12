@@ -10,10 +10,10 @@ PREBUILT_AGENT_SLUGS = {
 
 
 def _generate_quiz(topic: str, difficulty: str = "medium", num_questions: int = 5) -> str:
-  """Generate a structured quiz template for a given topic and difficulty.
+  """Generate a complete quiz directly using Gemini API in a single call.
   
-  This tool provides parameters for quiz generation. The agent MUST expand this template
-  into complete questions following the exact format specified.
+  This function directly calls Gemini to generate ALL quiz questions at once,
+  avoiding multiple API calls. The agent should use this tool when quiz is requested.
   
   Args:
     topic: The subject/topic for the quiz
@@ -21,26 +21,48 @@ def _generate_quiz(topic: str, difficulty: str = "medium", num_questions: int = 
     num_questions: Number of questions to generate (default: 5)
   
   Returns:
-    A structured quiz template in MCQ format that the agent should expand.
+    Complete quiz with all questions in the exact format specified.
   """
-  difficulty = difficulty.lower()
-  num_questions = max(1, min(20, int(num_questions)))  # Limit between 1-20
-  
-  template = f"""QUIZ GENERATION PARAMETERS:
-Topic: {topic}
-Difficulty: {difficulty}
-Number of Questions: {num_questions}
+  try:
+    # Ensure num_questions is an integer (handle type conversion safely)
+    if isinstance(num_questions, str):
+      try:
+        num_questions = int(num_questions)
+      except (ValueError, TypeError):
+        num_questions = 5
+    elif not isinstance(num_questions, (int, float)):
+      num_questions = 5
+    
+    difficulty = str(difficulty).lower() if difficulty else "medium"
+    topic = str(topic) if topic else "general knowledge"
+    num_questions = max(1, min(20, int(num_questions)))  # Limit between 1-20
+    
+    # Import Gemini client to generate quiz directly
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    # Create a focused prompt for quiz generation
+    quiz_prompt = f"""Generate a complete multiple-choice quiz with {num_questions} questions about "{topic}" at {difficulty} difficulty level.
 
-YOU MUST NOW GENERATE THE COMPLETE QUIZ FOLLOWING THIS EXACT FORMAT:
+CRITICAL REQUIREMENTS - FOLLOW EXACTLY:
+1. Start IMMEDIATELY with **Question 1:** - NO text before it
+2. NO preamble, NO introduction, NO conversational text
+3. NO emojis, NO special characters except **Question** and **Answer** markers
+4. Each question must have exactly 4 options labeled A), B), C), D)
+5. Each option must be on its own line
+6. Include **Answer:** [letter] immediately after each question's options
+7. End after the last answer - NO closing text
 
-**Question 1:** [Write your first complete question here]
+OUTPUT FORMAT (generate ALL {num_questions} questions in this exact format):
+
+**Question 1:** [Your complete first question here]
 A) [First option - must be plausible]
 B) [Second option - must be plausible]
 C) [Third option - must be plausible]
 D) [Fourth option - must be plausible]
 **Answer:** [A, B, C, or D]
 
-**Question 2:** [Write your second complete question here]
+**Question 2:** [Your complete second question here]
 A) [First option]
 B) [Second option]
 C) [Third option]
@@ -49,16 +71,53 @@ D) [Fourth option]
 
 [Continue for all {num_questions} questions...]
 
-CRITICAL FORMATTING RULES:
-- Start IMMEDIATELY with **Question 1:** - NO text before it
-- NO preamble, NO introduction, NO conversational text
-- NO emojis, NO special characters except **Question** and **Answer** markers
-- Each question must have exactly 4 options labeled A), B), C), D)
-- Each option must be on its own line
-- Include **Answer:** [letter] immediately after each question's options
-- End after the last answer - NO closing text"""
-  
-  return template
+Generate the complete quiz now:"""
+    
+    # Generate quiz in a single API call using GeminiClient
+    quiz_content = gemini_client.generate_response(
+      system_prompt="You are a quiz generator. Generate complete multiple-choice quizzes following the exact format specified.",
+      messages=[{"role": "user", "content": quiz_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    # Clean the response to ensure it starts with Question 1
+    if quiz_content:
+      # Find the first question marker
+      question_start = quiz_content.find("**Question 1:**")
+      if question_start == -1:
+        question_start = quiz_content.find("Question 1:")
+      
+      if question_start > 0:
+        quiz_content = quiz_content[question_start:].strip()
+      
+      # Ensure it ends properly (remove any trailing text after last answer)
+      # Find the last **Answer:** marker
+      last_answer_pos = quiz_content.rfind("**Answer:**")
+      if last_answer_pos == -1:
+        last_answer_pos = quiz_content.rfind("Answer:")
+      
+      if last_answer_pos > 0:
+        # Extract up to 50 characters after the last answer (to include the answer letter)
+        remaining = quiz_content[last_answer_pos:]
+        lines = remaining.split('\n')
+        if len(lines) > 0:
+          # Keep the answer line and remove everything after
+          answer_line = lines[0].strip()
+          quiz_content = quiz_content[:last_answer_pos] + answer_line
+    
+    return quiz_content if quiz_content else f"**Question 1:** Quiz generation failed. Please try again.\nA) Option A\nB) Option B\nC) Option C\nD) Option D\n**Answer:** A"
+    
+  except Exception as e:
+    # Fallback: return a template if direct generation fails
+    import traceback
+    print(f"Error in _generate_quiz: {traceback.format_exc()}")
+    # Return a simple template as fallback
+    try:
+      num_questions = max(1, min(20, int(num_questions) if isinstance(num_questions, (int, float, str)) else 5))
+    except:
+      num_questions = 5
+    return f"**Question 1:** Error generating quiz. Please try again.\nA) Option A\nB) Option B\nC) Option C\nD) Option D\n**Answer:** A"
 
 
 def _build_study_plan(goal: str, weeks: int = 4) -> str:
