@@ -101,6 +101,7 @@ POSTGRES_PORT=5432
 SECRET_KEY=your-super-secret-key-generate-with-python-secrets-token_urlsafe-32
 GEMINI_API_KEY=your-gemini-api-key
 CORS_ORIGINS=["https://agentic-platform.namatechnologlies.com"]
+CORS_ORIGINS_API=["*"]
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 BACKEND_PORT=8009
 

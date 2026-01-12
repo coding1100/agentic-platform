@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     
     # CORS
+    # For frontend web app - restrict to specific origins
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # For public API access - allow all origins (set to ["*"] to allow any origin)
+    CORS_ORIGINS_API: List[str] = ["*"]  # Allow all origins for API endpoints
     
     class Config:
         env_file = ".env"

@@ -11,14 +11,31 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS middleware - allows cross-origin requests for API endpoints
+# This enables other platforms to use your APIs from any domain
+# For public APIs, we allow all origins (*) which is standard practice
+# Security is handled by API key authentication, not CORS
+cors_origins = settings.CORS_ORIGINS_API
+if cors_origins == ["*"]:
+    # Allow all origins for public API access
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow any origin
+        allow_credentials=False,  # Must be False when using *
+        allow_methods=["*"],  # Allow all HTTP methods
+        allow_headers=["*"],  # Allow all headers (including X-API-Key)
+        expose_headers=["*"],  # Expose all response headers
+    )
+else:
+    # Restrict to specific origins (for frontend or specific platforms)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
