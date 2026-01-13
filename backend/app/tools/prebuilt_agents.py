@@ -6,6 +6,7 @@ PREBUILT_AGENT_SLUGS = {
   "personal_tutor": "education.personal_tutor",
   "course_creation_agent": "education.course_creation_agent",
   "language_practice_agent": "education.language_practice_agent",
+  "micro_learning_agent": "education.micro_learning_agent",
 }
 
 
@@ -770,6 +771,155 @@ YOU MUST NOW GENERATE THE COMPLETE ASSESSMENT FOLLOWING THIS FORMAT:
   return template
 
 
+def _generate_micro_lesson(topic: str, time_minutes: int = 5, difficulty: str = "medium") -> str:
+  """Generate a focused micro-lesson (5-15 minutes) on a specific topic.
+  
+  This function generates bite-sized lessons optimized for busy learners.
+  Lessons are structured, focused, and time-efficient.
+  
+  Args:
+    topic: The subject/topic for the lesson
+    time_minutes: Available time in minutes (5, 10, or 15)
+    difficulty: Difficulty level (easy, medium, hard)
+  
+  Returns:
+    Complete micro-lesson with concept, explanation, examples, and key takeaways.
+  """
+  try:
+    # Validate and normalize inputs
+    time_minutes = max(5, min(15, int(time_minutes))) if isinstance(time_minutes, (int, float, str)) else 5
+    if isinstance(time_minutes, str):
+      try:
+        time_minutes = int(time_minutes)
+      except (ValueError, TypeError):
+        time_minutes = 5
+    time_minutes = max(5, min(15, time_minutes))
+    
+    difficulty = str(difficulty).lower() if difficulty else "medium"
+    topic = str(topic) if topic else "general knowledge"
+    
+    # Import Gemini client
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    # Create lesson prompt based on time
+    depth_map = {
+      5: "brief overview with 1-2 key concepts",
+      10: "detailed explanation with 2-3 key concepts and examples",
+      15: "comprehensive lesson with 3-4 concepts, multiple examples, and practical applications"
+    }
+    
+    lesson_prompt = f"""Generate a focused {time_minutes}-minute micro-lesson about "{topic}" at {difficulty} difficulty level.
+
+CRITICAL REQUIREMENTS:
+1. Keep the lesson focused and time-efficient ({depth_map.get(time_minutes, 'brief overview')})
+2. Structure: Concept → Explanation → Example → Key Takeaways
+3. Include 1-2 practical examples relevant to the topic
+4. End with "**Key Takeaways:**" section with 3-5 bullet points
+5. Make content engaging and easy to digest
+6. NO preamble, NO introduction text - start directly with the concept
+7. Use clear, concise language suitable for busy learners
+
+OUTPUT FORMAT:
+
+**Concept:** [Main concept name]
+
+**Explanation:**
+[Clear, focused explanation of the concept - {time_minutes} minutes worth of content]
+
+**Example:**
+[Practical example or real-world application]
+
+**Key Takeaways:**
+• [Takeaway 1]
+• [Takeaway 2]
+• [Takeaway 3]
+[Add more as needed]
+
+Generate the lesson now:"""
+    
+    lesson_content = gemini_client.generate_response(
+      system_prompt="You are a micro-learning expert. Create focused, time-efficient lessons for busy learners.",
+      messages=[{"role": "user", "content": lesson_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return lesson_content if lesson_content else f"**Concept:** {topic}\n\n**Explanation:**\nA brief overview of {topic}.\n\n**Key Takeaways:**\n• Understanding {topic} is important\n• Practice helps mastery"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _generate_micro_lesson: {traceback.format_exc()}")
+    return f"Error generating lesson: {str(e)}. Please try again."
+
+
+def _create_flashcards(topic: str, num_cards: int = 5) -> str:
+  """Create flashcards for spaced repetition learning.
+  
+  Generates flashcards with questions/concepts on one side and answers/explanations on the other.
+  
+  Args:
+    topic: The subject/topic for flashcards
+    num_cards: Number of flashcards to generate (default: 5)
+  
+  Returns:
+    Formatted flashcards ready for spaced repetition review.
+  """
+  try:
+    # Validate inputs
+    num_cards = max(3, min(10, int(num_cards))) if isinstance(num_cards, (int, float, str)) else 5
+    if isinstance(num_cards, str):
+      try:
+        num_cards = int(num_cards)
+      except (ValueError, TypeError):
+        num_cards = 5
+    num_cards = max(3, min(10, num_cards))
+    
+    topic = str(topic) if topic else "general knowledge"
+    
+    # Import Gemini client
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    flashcard_prompt = f"""Create {num_cards} flashcards about "{topic}" for spaced repetition learning.
+
+CRITICAL REQUIREMENTS:
+1. Each flashcard should have a clear question/concept and concise answer
+2. Format: **Card N:** followed by Q: and A: sections
+3. Keep answers brief and memorable (1-2 sentences max)
+4. Focus on key concepts and important facts
+5. NO preamble - start directly with Card 1
+6. End after the last card - NO closing text
+
+OUTPUT FORMAT:
+
+**Card 1:**
+Q: [Question or concept]
+A: [Brief answer/explanation]
+
+**Card 2:**
+Q: [Question or concept]
+A: [Brief answer/explanation]
+
+[Continue for all {num_cards} cards...]
+
+Generate the flashcards now:"""
+    
+    flashcard_content = gemini_client.generate_response(
+      system_prompt="You are a flashcard creation expert. Create effective flashcards for spaced repetition learning.",
+      messages=[{"role": "user", "content": flashcard_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return flashcard_content if flashcard_content else f"**Card 1:**\nQ: What is {topic}?\nA: {topic} is an important concept to learn."
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _create_flashcards: {traceback.format_exc()}")
+    return f"Error creating flashcards: {str(e)}. Please try again."
+
+
 def get_tools_for_agent_slug(slug: str) -> List[Tool]:
   """Return LangChain tools enabled for a given prebuilt agent slug."""
   tools: List[Tool] = []
@@ -947,6 +1097,47 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
         name="build_study_plan",
         func=_build_study_plan,
         description="Create a weekly study plan outline for language learning goals.",
+      )
+    )
+
+  elif slug == PREBUILT_AGENT_SLUGS["micro_learning_agent"]:
+    tools.append(
+      Tool(
+        name="generate_micro_lesson",
+        func=_generate_micro_lesson,
+        description=(
+          "Generate a focused micro-lesson (5-15 minutes) on a specific topic. "
+          "Lessons are structured with concept, explanation, examples, and key takeaways. "
+          "Args: topic (str), time_minutes (int: 5/10/15, default=5), difficulty (str: easy/medium/hard, default='medium')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="create_flashcards",
+        func=_create_flashcards,
+        description=(
+          "Create flashcards for spaced repetition learning. "
+          "Generates Q&A format flashcards for key concepts. "
+          "Args: topic (str), num_cards (int: 3-10, default=5)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="generate_quiz",
+        func=_generate_quiz,
+        description=(
+          "Generate a quick 2-3 question micro-quiz for instant feedback after lessons. "
+          "Args: topic (str), difficulty (str: easy/medium/hard, default='medium'), num_questions (int: 2-3 for micro-learning, default=2)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="build_study_plan",
+        func=_build_study_plan,
+        description="Create a daily/weekly micro-learning schedule with time slots and topics.",
       )
     )
 

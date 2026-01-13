@@ -7,430 +7,548 @@
       </div>
     </header>
 
-    <main class="page-content">
-      <div class="documentation-container">
-        <!-- Overview Section -->
-        <section class="docs-section-main">
-          <h2>Overview</h2>
-          <p class="section-description">
-            This API allows external platforms to interact with AI agents through REST endpoints. 
-            Our pre-built agents are <strong>not simple chatbots</strong> - they follow structured workflows 
-            and guide users through multi-step processes. Each agent maintains conversation context 
-            and provides personalized, tutor-like interactions.
-          </p>
-          <p class="section-description">
-            <strong>Important:</strong> API keys can now be <strong>universal</strong> (work with all agents) 
-            or <strong>agent-specific</strong>. When creating a key, you can choose to make it universal 
-            or tie it to a specific agent.
-          </p>
-        </section>
+    <div class="docs-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="docs-sidebar">
+        <nav class="sidebar-nav">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="activeTab = tab.id"
+            :class="['nav-tab', { active: activeTab === tab.id }]"
+          >
+            <span class="tab-icon">{{ tab.icon }}</span>
+            <span class="tab-label">{{ tab.label }}</span>
+          </button>
+        </nav>
+      </aside>
 
-        <!-- Pre-built Agents Section -->
-        <section class="docs-section-main">
-          <h2>Pre-built Agents & Their Flows</h2>
-          
-          <div class="agent-flow-section">
-            <h3>1. Personal Tutor Agent</h3>
-            <p class="section-description">
-              <strong>Slug:</strong> <code>education.personal_tutor</code><br>
-              A one-on-one tutor that explains concepts step-by-step, creates practice quizzes, 
-              and builds study plans. This agent follows a structured learning flow.
-            </p>
-            
-            <h4>Typical Flow:</h4>
-            <ol class="flow-list">
-              <li><strong>Initial Greeting:</strong> Agent introduces itself and asks what the user wants to learn</li>
-              <li><strong>Topic Selection:</strong> User specifies a topic (e.g., "I want to learn about photosynthesis")</li>
-              <li><strong>Concept Explanation:</strong> Agent explains concepts step-by-step with check-point questions</li>
-              <li><strong>Practice Quiz:</strong> Agent generates quizzes with multiple questions in a single response</li>
-              <li><strong>Study Plan:</strong> Agent can create personalized study plans</li>
-            </ol>
-            
-            <h4>Example: Requesting a Quiz</h4>
-            <div class="code-block">
-              <pre class="json-example">{{ getQuizExample() }}</pre>
-              <button @click="copyToClipboard(getQuizExample(), false)" class="btn-copy-inline">📋</button>
-            </div>
-            <p class="docs-note">
-              <strong>Note:</strong> The agent generates ALL quiz questions in a single API call. 
-              The response will contain all questions formatted as:<br>
-              <code>**Question 1:** [question] ... **Answer:** [letter]</code>
-            </p>
+      <!-- Main Content Area -->
+      <main class="docs-content">
+        <div class="documentation-container">
+          <!-- Overview Tab -->
+          <div v-if="activeTab === 'overview'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Overview</h2>
+              <p class="section-description">
+                This API allows external platforms to interact with AI agents through REST endpoints. 
+                Our pre-built agents are <strong>not simple chatbots</strong> - they follow structured workflows 
+                and guide users through multi-step processes. Each agent maintains conversation context 
+                and provides personalized, tutor-like interactions. API keys can be <strong>universal</strong> 
+                (work with all agents) or <strong>agent-specific</strong> for enhanced security.
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Base URL</h2>
+              <div class="code-block">
+                <code class="url-code">{{ baseUrl }}/api/v1/public/agents/{agent_slug}/chat</code>
+                <button 
+                  @click="copyToClipboard(`${baseUrl}/api/v1/public/agents/{agent_slug}/chat`, false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+              <p class="docs-note">
+                Replace <code>{agent_slug}</code> with your agent's slug. 
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Authentication</h2>
+              <p class="section-description">
+                All requests require an API key in the <code>X-API-Key</code> header. 
+                API keys can be created from the API Keys page in your dashboard.
+              </p>
+              <div class="code-block">
+                <code>X-API-Key: your_api_key_here</code>
+                <button 
+                  @click="copyToClipboard('X-API-Key: your_api_key_here', false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+              <h4>API Key Types</h4>
+              <ul class="docs-notes">
+                <li><strong>Universal Keys:</strong> Work with all agents. Create by leaving the agent selection as "All Agents" when creating a key.</li>
+                <li><strong>Agent-Specific Keys:</strong> Work only with a specific agent. More secure but less flexible.</li>
+                <li><strong>Domain Whitelisting:</strong> Optional security feature. Restrict API key usage to specific domains (e.g., <code>https://yourdomain.com</code>). Leave empty to allow all domains.</li>
+              </ul>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Getting Agent Information</h2>
+              <p class="section-description">
+                To get a list of available agents and their slugs, you can use the following endpoint:
+              </p>
+              <div class="endpoint-info">
+                <code class="method-badge">GET</code>
+                <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents</code>
+              </div>
+              <div class="code-block">
+                <pre class="json-example">{{ getListAgentsExample() }}</pre>
+                <button 
+                  @click="copyToClipboard(getListAgentsExample(), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+              <p class="docs-note">
+                This endpoint returns a list of all available pre-built agents with their slugs, names, and descriptions. 
+                Use the <code>slug</code> field in your chat requests.
+              </p>
+            </section>
           </div>
 
-          <div class="agent-flow-section">
-            <h3>2. Course Creation Agent</h3>
-            <p class="section-description">
-              <strong>Slug:</strong> <code>education.course_creation_agent</code><br>
-              A personal tutor that guides users through creating comprehensive courses with 
-              learning assessments, concept maps, workflow automation, and validation.
-            </p>
-            
-            <h4>Typical Flow:</h4>
-            <ol class="flow-list">
-              <li><strong>Discovery Phase:</strong> Agent asks about learning objectives, target audience, duration, format</li>
-              <li><strong>Structure Design:</strong> Agent creates course outline with modules and lessons</li>
-              <li><strong>Concept Mapping:</strong> Agent visualizes relationships between topics</li>
-              <li><strong>Assessment Design:</strong> Agent creates diagnostic, formative, and summative assessments</li>
-              <li><strong>Workflow Creation:</strong> Agent designs automated workflows for course delivery</li>
-              <li><strong>Validation:</strong> Agent validates content against educational standards</li>
-            </ol>
-            
-            <h4>Example: Starting Course Creation</h4>
-            <div class="code-block">
-              <pre class="json-example">{{ getCourseCreationExample() }}</pre>
-              <button @click="copyToClipboard(getCourseCreationExample(), false)" class="btn-copy-inline">📋</button>
-            </div>
-            <p class="docs-note">
-              <strong>Important:</strong> Maintain the same <code>conversation_id</code> throughout the entire 
-              course creation process to preserve context and workflow state.
-            </p>
-          </div>
+          <!-- Personal Tutor Agent Tab -->
+          <div v-if="activeTab === 'personal-tutor'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Personal Tutor Agent Integration</h2>
+              <p class="section-description">
+                <strong>Agent Slug:</strong> <code>education.personal_tutor</code><br>
+                A one-on-one tutor that explains concepts step-by-step, creates practice quizzes, 
+                and builds study plans. This agent follows a structured learning flow.
+              </p>
+            </section>
 
-          <div class="agent-flow-section">
-            <h3>3. Language Practice Agent</h3>
-            <p class="section-description">
-              <strong>Slug:</strong> <code>education.language_practice_agent</code><br>
-              A personal tutor that guides users through language learning with vocabulary, 
-              grammar, conversation, and pronunciation practice.
-            </p>
-            
-            <h4>Typical Flow:</h4>
-            <ol class="flow-list">
-              <li><strong>Language Selection:</strong> User chooses target language</li>
-              <li><strong>Placement Assessment:</strong> Agent assesses proficiency level (CEFR A1-C2)</li>
-              <li><strong>Goal Setting:</strong> Agent understands learning goals and time commitment</li>
-              <li><strong>Vocabulary Building:</strong> Agent creates vocabulary sets with spaced repetition</li>
-              <li><strong>Grammar Practice:</strong> Agent provides interactive grammar exercises</li>
-              <li><strong>Conversation Practice:</strong> Agent creates realistic dialogue scenarios</li>
-              <li><strong>Pronunciation Training:</strong> Agent provides pronunciation exercises</li>
-              <li><strong>Progress Tracking:</strong> Agent tracks progress with gamification (XP, levels, streaks)</li>
-            </ol>
-            
-            <h4>Example: Starting Language Learning</h4>
-            <div class="code-block">
-              <pre class="json-example">{{ getLanguagePracticeExample() }}</pre>
-              <button @click="copyToClipboard(getLanguagePracticeExample(), false)" class="btn-copy-inline">📋</button>
-            </div>
-            <p class="docs-note">
-              <strong>Tip:</strong> The agent maintains conversation context, so you can build on previous 
-              interactions. For example, after selecting a language, you can ask for vocabulary without 
-              repeating the language selection.
-            </p>
-          </div>
-        </section>
+            <section class="docs-section-main">
+              <h2>Typical Workflow</h2>
+              <ol class="flow-list">
+                <li><strong>Initial Greeting:</strong> Agent introduces itself and asks what the user wants to learn</li>
+                <li><strong>Topic Selection:</strong> User specifies a topic (e.g., "I want to learn about photosynthesis")</li>
+                <li><strong>Concept Explanation:</strong> Agent explains concepts step-by-step with check-point questions</li>
+                <li><strong>Practice Quiz:</strong> Agent generates quizzes with multiple questions in a single response</li>
+                <li><strong>Study Plan:</strong> Agent can create personalized study plans</li>
+              </ol>
+            </section>
 
-        <!-- Base URL Section -->
-        <section class="docs-section-main">
-          <h2>Base URL</h2>
-          <div class="code-block">
-            <code class="url-code">{{ baseUrl }}/api/v1/public/agents/{agent_slug}/chat</code>
-            <button 
-              @click="copyToClipboard(`${baseUrl}/api/v1/public/agents/{agent_slug}/chat`, false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-          <p class="docs-note">
-            Replace <code>{agent_slug}</code> with your agent's slug. 
-            Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>
-          </p>
-        </section>
+            <section class="docs-section-main">
+              <h2>Endpoint</h2>
+              <div class="endpoint-info">
+                <code class="method-badge">POST</code>
+                <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.personal_tutor/chat</code>
+              </div>
+            </section>
 
-        <!-- Authentication Section -->
-        <section class="docs-section-main">
-          <h2>Authentication</h2>
-          <p class="section-description">
-            All requests require an API key in the <code>X-API-Key</code> header. 
-            API keys can be created from the API Keys page in your dashboard.
-          </p>
-          <div class="code-block">
-            <code>X-API-Key: your_api_key_here</code>
-            <button 
-              @click="copyToClipboard('X-API-Key: your_api_key_here', false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-          <h4>API Key Types</h4>
-          <ul class="docs-notes">
-            <li><strong>Universal Keys:</strong> Work with all agents. Create by leaving the agent selection as "All Agents" when creating a key.</li>
-            <li><strong>Agent-Specific Keys:</strong> Work only with a specific agent. More secure but less flexible.</li>
-            <li><strong>Domain Whitelisting:</strong> Optional security feature. Restrict API key usage to specific domains (e.g., <code>https://yourdomain.com</code>). Leave empty to allow all domains.</li>
-          </ul>
-        </section>
-
-        <!-- Quick Start Section -->
-        <section class="docs-section-main">
-          <h2>Quick Start Guide</h2>
-          <p class="section-description">
-            Get started in 3 simple steps:
-          </p>
-          <ol class="flow-list">
-            <li><strong>Create an API Key:</strong> Go to the API Keys page and create a new key (universal or agent-specific)</li>
-            <li><strong>Choose an Agent:</strong> Select the agent slug you want to use (e.g., <code>education.personal_tutor</code>)</li>
-            <li><strong>Make Your First Request:</strong> Send a POST request to the chat endpoint with your API key</li>
-          </ol>
-          
-          <h4>Complete Example (JavaScript)</h4>
-          <div class="code-block">
-            <pre class="js-example">{{ getQuickStartExample() }}</pre>
-            <button 
-              @click="copyToClipboard(getQuickStartExample(), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-        </section>
-
-        <!-- Endpoint Section -->
-        <section class="docs-section-main">
-          <h2>Send Message to Agent</h2>
-          <div class="endpoint-info">
-            <code class="method-badge">POST</code>
-            <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/{agent_slug}/chat</code>
-          </div>
-          
-          <h3>Request Headers</h3>
-          <div class="code-block">
-            <pre class="json-example">{{ JSON.stringify({
+            <section class="docs-section-main">
+              <h2>Request Format</h2>
+              <h3>Headers</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
   "X-API-Key": "your_api_key_here",
   "Content-Type": "application/json"
 }, null, 2) }}</pre>
-            <button 
-              @click="copyToClipboard(JSON.stringify({
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
   'X-API-Key': 'your_api_key_here',
   'Content-Type': 'application/json'
 }, null, 2), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
 
-          <h3>Request Body</h3>
-          <div class="code-block">
-            <pre class="json-example">{{ JSON.stringify({
+              <h3>Request Body</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
   "conversation_id": "optional-uuid-or-null",
   "message": "Your message here"
 }, null, 2) }}</pre>
-            <button 
-              @click="copyToClipboard(JSON.stringify({
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
   conversation_id: null,
   message: 'Your message here'
 }, null, 2), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-          <p class="docs-note">
-            <code>conversation_id</code> is optional. If not provided or set to <code>null</code>, a new conversation will be created. 
-            Include the same <code>conversation_id</code> in subsequent requests to maintain conversation context.
-          </p>
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+              <p class="docs-note">
+                <code>conversation_id</code> is optional. If not provided or set to <code>null</code>, a new conversation will be created. 
+                Include the same <code>conversation_id</code> in subsequent requests to maintain conversation context.
+              </p>
+            </section>
 
-          <h3>Response</h3>
-          <div class="code-block">
-            <pre class="json-example">{{ JSON.stringify({
+            <section class="docs-section-main">
+              <h2>Response Format</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
   "conversation_id": "uuid-string",
   "message": "Agent's response text",
   "agent_id": "uuid-string"
 }, null, 2) }}</pre>
-          </div>
-          <p class="docs-note">
-            <strong>Response Format:</strong> The <code>message</code> field contains the agent's response. 
-            For quizzes, the response will be formatted with <code>**Question N:**</code> markers. 
-            Always save the <code>conversation_id</code> from the response to maintain context in subsequent requests.
-          </p>
-        </section>
+              </div>
+            </section>
 
-        <!-- Response Parsing Section -->
-        <section class="docs-section-main">
-          <h2>Parsing Responses</h2>
-          
-          <h3>Quiz Response Format</h3>
-          <p class="section-description">
-            When requesting a quiz, the response contains all questions in a structured format:
-          </p>
-          <div class="code-block">
-            <pre class="json-example">{{ getQuizResponseExample() }}</pre>
-            <button 
-              @click="copyToClipboard(getQuizResponseExample(), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-          
-          <h4>Parsing Quiz Questions (JavaScript Example)</h4>
-          <div class="code-block">
-            <pre class="js-example">{{ getQuizParserExample() }}</pre>
-            <button 
-              @click="copyToClipboard(getQuizParserExample(), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
+            <section class="docs-section-main">
+              <h2>Example: Requesting a Quiz</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ getQuizExample() }}</pre>
+                <button @click="copyToClipboard(getQuizExample(), false)" class="btn-copy-inline">📋</button>
+              </div>
+              <p class="docs-note">
+                <strong>Note:</strong> The agent generates ALL quiz questions in a single API call. 
+                The response will contain all questions formatted as:<br>
+                <code>**Question 1:** [question] ... **Answer:** [letter]</code>
+              </p>
+            </section>
 
-          <h3>General Response Format</h3>
-          <p class="section-description">
-            For non-quiz responses, the <code>message</code> field contains plain text that you can display directly to users. 
-            The agent maintains conversation context, so responses may reference previous messages in the conversation.
-          </p>
-        </section>
+            <section class="docs-section-main">
+              <h2>Quiz Response Parsing</h2>
+              <p class="section-description">
+                Quiz responses contain all questions in a structured format. Here's how to parse them:
+              </p>
+              <div class="code-block">
+                <pre class="js-example">{{ getQuizParserExample() }}</pre>
+                <button 
+                  @click="copyToClipboard(getQuizParserExample(), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+            </section>
 
-        <!-- Workflow Examples Section -->
-        <section class="docs-section-main">
-          <h2>Complete Workflow Examples</h2>
-          
-          <div class="agent-flow-section">
-            <h3>Example: Personal Tutor - Complete Learning Session</h3>
-            <div class="code-block">
-              <pre class="js-example">{{ getCompleteWorkflowExample() }}</pre>
-              <button 
-                @click="copyToClipboard(getCompleteWorkflowExample(), false)" 
-                class="btn-copy-inline"
-              >
-                📋
-              </button>
-            </div>
-            <p class="docs-note">
-              This example shows a complete learning session: starting a conversation, asking for explanations, 
-              requesting a quiz, and maintaining context throughout.
-            </p>
-          </div>
-        </section>
-
-        <!-- Code Examples Section -->
-        <section class="docs-section-main">
-          <h2>Code Examples</h2>
-          
-          <div class="example-section">
-            <h3>cURL</h3>
-            <div class="code-block">
-              <pre class="curl-example">{{ getCurlExample() }}</pre>
-              <button 
-                @click="copyToClipboard(getCurlExample(), false)" 
-                class="btn-copy-inline"
-              >
-                📋
-              </button>
-            </div>
+            <section class="docs-section-main">
+              <h2>Complete Workflow Example</h2>
+              <div class="code-block">
+                <pre class="js-example">{{ getCompleteWorkflowExample() }}</pre>
+                <button 
+                  @click="copyToClipboard(getCompleteWorkflowExample(), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+            </section>
           </div>
 
-          <div class="example-section">
-            <h3>JavaScript (Fetch API)</h3>
-            <div class="code-block">
-              <pre class="js-example">{{ getJsExample() }}</pre>
-              <button 
-                @click="copyToClipboard(getJsExample(), false)" 
-                class="btn-copy-inline"
-              >
-                📋
-              </button>
-            </div>
+          <!-- Course Creation Agent Tab -->
+          <div v-if="activeTab === 'course-creation'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Course Creation Agent Integration</h2>
+              <p class="section-description">
+                <strong>Agent Slug:</strong> <code>education.course_creation_agent</code><br>
+                A personal tutor that guides users through creating comprehensive courses with 
+                learning assessments, concept maps, workflow automation, and validation.
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Typical Workflow</h2>
+              <ol class="flow-list">
+                <li><strong>Discovery Phase:</strong> Agent asks about learning objectives, target audience, duration, format</li>
+                <li><strong>Structure Design:</strong> Agent creates course outline with modules and lessons</li>
+                <li><strong>Concept Mapping:</strong> Agent visualizes relationships between topics</li>
+                <li><strong>Assessment Design:</strong> Agent creates diagnostic, formative, and summative assessments</li>
+                <li><strong>Workflow Creation:</strong> Agent designs automated workflows for course delivery</li>
+                <li><strong>Validation:</strong> Agent validates content against educational standards</li>
+              </ol>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Endpoint</h2>
+              <div class="endpoint-info">
+                <code class="method-badge">POST</code>
+                <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.course_creation_agent/chat</code>
+              </div>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Request Format</h2>
+              <h3>Headers</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+
+              <h3>Request Body</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "optional-uuid-or-null",
+  "message": "I want to create a course on Python programming for beginners"
+}, null, 2) }}</pre>
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
+  conversation_id: null,
+  message: 'I want to create a course on Python programming for beginners'
+}, null, 2), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Example: Starting Course Creation</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ getCourseCreationExample() }}</pre>
+                <button @click="copyToClipboard(getCourseCreationExample(), false)" class="btn-copy-inline">📋</button>
+              </div>
+              <p class="docs-note">
+                <strong>Important:</strong> Maintain the same <code>conversation_id</code> throughout the entire 
+                course creation process to preserve context and workflow state.
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Response Format</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "Agent's response with follow-up questions or course structure",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+              </div>
+            </section>
           </div>
 
-          <div class="example-section">
-            <h3>Python (requests)</h3>
-            <div class="code-block">
-              <pre class="python-example">{{ getPythonExample() }}</pre>
-              <button 
-                @click="copyToClipboard(getPythonExample(), false)" 
-                class="btn-copy-inline"
-              >
-                📋
-              </button>
-            </div>
+          <!-- Language Practice Agent Tab -->
+          <div v-if="activeTab === 'language-practice'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Language Practice Agent Integration</h2>
+              <p class="section-description">
+                <strong>Agent Slug:</strong> <code>education.language_practice_agent</code><br>
+                A personal tutor that guides users through language learning with vocabulary, 
+                grammar, conversation, and pronunciation practice.
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Typical Workflow</h2>
+              <ol class="flow-list">
+                <li><strong>Language Selection:</strong> User chooses target language</li>
+                <li><strong>Placement Assessment:</strong> Agent assesses proficiency level (CEFR A1-C2)</li>
+                <li><strong>Goal Setting:</strong> Agent understands learning goals and time commitment</li>
+                <li><strong>Vocabulary Building:</strong> Agent creates vocabulary sets with spaced repetition</li>
+                <li><strong>Grammar Practice:</strong> Agent provides interactive grammar exercises</li>
+                <li><strong>Conversation Practice:</strong> Agent creates realistic dialogue scenarios</li>
+                <li><strong>Pronunciation Training:</strong> Agent provides pronunciation exercises</li>
+                <li><strong>Progress Tracking:</strong> Agent tracks progress with gamification (XP, levels, streaks)</li>
+              </ol>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Endpoint</h2>
+              <div class="endpoint-info">
+                <code class="method-badge">POST</code>
+                <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.language_practice_agent/chat</code>
+              </div>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Request Format</h2>
+              <h3>Headers</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+
+              <h3>Request Body</h3>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "optional-uuid-or-null",
+  "message": "I want to learn Spanish"
+}, null, 2) }}</pre>
+                <button 
+                  @click="copyToClipboard(JSON.stringify({
+  conversation_id: null,
+  message: 'I want to learn Spanish'
+}, null, 2), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Example: Starting Language Learning</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ getLanguagePracticeExample() }}</pre>
+                <button @click="copyToClipboard(getLanguagePracticeExample(), false)" class="btn-copy-inline">📋</button>
+              </div>
+              <p class="docs-note">
+                <strong>Tip:</strong> The agent maintains conversation context, so you can build on previous 
+                interactions. For example, after selecting a language, you can ask for vocabulary without 
+                repeating the language selection.
+              </p>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Response Format</h2>
+              <div class="code-block">
+                <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "Agent's response with language learning guidance",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+              </div>
+            </section>
           </div>
 
-          <div class="example-section">
-            <h3>Node.js (axios)</h3>
-            <div class="code-block">
-              <pre class="node-example">{{ getNodeExample() }}</pre>
-              <button 
-                @click="copyToClipboard(getNodeExample(), false)" 
-                class="btn-copy-inline"
-              >
-                📋
-              </button>
-            </div>
-          </div>
-        </section>
+          <!-- Quick Start Tab -->
+          <div v-if="activeTab === 'quick-start'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Quick Start Guide</h2>
+              <p class="section-description">
+                Get started in 3 simple steps:
+              </p>
+              <ol class="flow-list">
+                <li><strong>Create an API Key:</strong> Go to the API Keys page and create a new key (universal or agent-specific)</li>
+                <li><strong>Choose an Agent:</strong> Select the agent slug you want to use (e.g., <code>education.personal_tutor</code>)</li>
+                <li><strong>Make Your First Request:</strong> Send a POST request to the chat endpoint with your API key</li>
+              </ol>
+            </section>
 
-        <!-- Important Notes Section -->
-        <section class="docs-section-main">
-          <h2>Important Notes</h2>
-          <ul class="docs-notes">
-            <li><strong>Universal vs Agent-Specific Keys:</strong> API keys can be universal (work with all agents) or agent-specific. Universal keys are more flexible but agent-specific keys provide better security.</li>
-            <li><strong>Conversation Context:</strong> Include the same <code>conversation_id</code> in subsequent requests to maintain conversation history.</li>
-            <li><strong>Rate Limits:</strong> Each API key has a configurable rate limit (default: 60 requests/minute). Exceeding the limit will result in a 429 error.</li>
-            <li><strong>Security:</strong> Keep your API keys secure. They are shown only once when created. If lost, you'll need to create a new key.</li>
-            <li><strong>Error Handling:</strong> The API returns standard HTTP status codes. Check the response status before processing the body.</li>
-            <li><strong>Base URL:</strong> Make sure to use the correct base URL. For production: <code>https://agentic-platform.namatechnologlies.com</code>, for development: <code>http://localhost:8009</code></li>
-            <li><strong>Domain Whitelisting:</strong> If you've configured domain whitelisting for your API key, ensure requests include the <code>Origin</code> header matching your whitelisted domain.</li>
-            <li><strong>Quiz Generation:</strong> Quiz requests generate ALL questions in a single API call for efficiency. No need to make multiple requests.</li>
-            <li><strong>Response Time:</strong> Agent responses typically take 2-10 seconds depending on complexity. Quiz generation may take 5-15 seconds for complete quizzes.</li>
-          </ul>
-        </section>
+            <section class="docs-section-main">
+              <h2>Complete Example (JavaScript)</h2>
+              <div class="code-block">
+                <pre class="js-example">{{ getQuickStartExample() }}</pre>
+                <button 
+                  @click="copyToClipboard(getQuickStartExample(), false)" 
+                  class="btn-copy-inline"
+                >
+                  📋
+                </button>
+              </div>
+            </section>
+          </div>
 
-        <!-- Getting Started Section -->
-        <section class="docs-section-main">
-          <h2>Getting Agent Information</h2>
-          <p class="section-description">
-            To get a list of available agents and their slugs, you can use the following endpoint:
-          </p>
-          <div class="endpoint-info">
-            <code class="method-badge">GET</code>
-            <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents</code>
-          </div>
-          <div class="code-block">
-            <pre class="json-example">{{ getListAgentsExample() }}</pre>
-            <button 
-              @click="copyToClipboard(getListAgentsExample(), false)" 
-              class="btn-copy-inline"
-            >
-              📋
-            </button>
-          </div>
-          <p class="docs-note">
-            This endpoint returns a list of all available pre-built agents with their slugs, names, and descriptions. 
-            Use the <code>slug</code> field in your chat requests.
-          </p>
-        </section>
+          <!-- Code Examples Tab -->
+          <div v-if="activeTab === 'code-examples'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Code Examples</h2>
+              
+              <div class="example-section">
+                <h3>cURL</h3>
+                <div class="code-block">
+                  <pre class="curl-example">{{ getCurlExample() }}</pre>
+                  <button 
+                    @click="copyToClipboard(getCurlExample(), false)" 
+                    class="btn-copy-inline"
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
 
-        <!-- Error Codes Section -->
-        <section class="docs-section-main">
-          <h2>Error Codes</h2>
-          <div class="error-codes-table">
-            <div class="error-row">
-              <code class="status-code">400</code>
-              <span class="error-desc">Bad Request - Invalid request body or parameters</span>
-            </div>
-            <div class="error-row">
-              <code class="status-code">401</code>
-              <span class="error-desc">Unauthorized - Missing or invalid API key</span>
-            </div>
-            <div class="error-row">
-              <code class="status-code">404</code>
-              <span class="error-desc">Not Found - Agent not found or API key not authorized for this agent</span>
-            </div>
-            <div class="error-row">
-              <code class="status-code">429</code>
-              <span class="error-desc">Too Many Requests - Rate limit exceeded</span>
-            </div>
-            <div class="error-row">
-              <code class="status-code">500</code>
-              <span class="error-desc">Internal Server Error - Server-side error</span>
-            </div>
+              <div class="example-section">
+                <h3>JavaScript (Fetch API)</h3>
+                <div class="code-block">
+                  <pre class="js-example">{{ getJsExample() }}</pre>
+                  <button 
+                    @click="copyToClipboard(getJsExample(), false)" 
+                    class="btn-copy-inline"
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
+
+              <div class="example-section">
+                <h3>Python (requests)</h3>
+                <div class="code-block">
+                  <pre class="python-example">{{ getPythonExample() }}</pre>
+                  <button 
+                    @click="copyToClipboard(getPythonExample(), false)" 
+                    class="btn-copy-inline"
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
+
+              <div class="example-section">
+                <h3>Node.js (axios)</h3>
+                <div class="code-block">
+                  <pre class="node-example">{{ getNodeExample() }}</pre>
+                  <button 
+                    @click="copyToClipboard(getNodeExample(), false)" 
+                    class="btn-copy-inline"
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
-      </div>
-    </main>
+
+          <!-- Error Codes Tab -->
+          <div v-if="activeTab === 'errors'" class="tab-content">
+            <section class="docs-section-main">
+              <h2>Error Codes</h2>
+              <div class="error-codes-table">
+                <div class="error-row">
+                  <code class="status-code">400</code>
+                  <span class="error-desc">Bad Request - Invalid request body or parameters</span>
+                </div>
+                <div class="error-row">
+                  <code class="status-code">401</code>
+                  <span class="error-desc">Unauthorized - Missing or invalid API key</span>
+                </div>
+                <div class="error-row">
+                  <code class="status-code">404</code>
+                  <span class="error-desc">Not Found - Agent not found or API key not authorized for this agent</span>
+                </div>
+                <div class="error-row">
+                  <code class="status-code">429</code>
+                  <span class="error-desc">Too Many Requests - Rate limit exceeded</span>
+                </div>
+                <div class="error-row">
+                  <code class="status-code">500</code>
+                  <span class="error-desc">Internal Server Error - Server-side error</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="docs-section-main">
+              <h2>Important Notes</h2>
+              <ul class="docs-notes">
+                <li><strong>Universal vs Agent-Specific Keys:</strong> API keys can be universal (work with all agents) or agent-specific. Universal keys are more flexible but agent-specific keys provide better security.</li>
+                <li><strong>Conversation Context:</strong> Include the same <code>conversation_id</code> in subsequent requests to maintain conversation history.</li>
+                <li><strong>Rate Limits:</strong> Each API key has a configurable rate limit (default: 60 requests/minute). Exceeding the limit will result in a 429 error.</li>
+                <li><strong>Security:</strong> Keep your API keys secure. They are shown only once when created. If lost, you'll need to create a new key.</li>
+                <li><strong>Error Handling:</strong> The API returns standard HTTP status codes. Check the response status before processing the body.</li>
+                <li><strong>Base URL:</strong> Make sure to use the correct base URL. For production: <code>https://agentic-platform.namatechnologlies.com</code>, for development: <code>http://localhost:8009</code></li>
+                <li><strong>Domain Whitelisting:</strong> If you've configured domain whitelisting for your API key, ensure requests include the <code>Origin</code> header matching your whitelisted domain.</li>
+                <li><strong>Quiz Generation:</strong> Quiz requests generate ALL questions in a single API call for efficiency. No need to make multiple requests.</li>
+                <li><strong>Response Time:</strong> Agent responses typically take 2-10 seconds depending on complexity. Quiz generation may take 5-15 seconds for complete quizzes.</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -826,6 +944,87 @@ h1 {
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
+.docs-layout {
+  display: flex;
+  min-height: calc(100vh - 80px);
+  position: relative;
+  z-index: 1;
+}
+
+.docs-sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 24px 0;
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.nav-tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateX(4px);
+}
+
+.nav-tab.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.8), rgba(118, 75, 162, 0.8));
+  border-color: rgba(255, 255, 255, 0.4);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.tab-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.tab-label {
+  flex: 1;
+}
+
+.docs-content {
+  flex: 1;
+  padding: 40px;
+  overflow-y: auto;
+  max-width: calc(100vw - 280px);
+}
+
+.tab-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 .page-content {
   max-width: 1000px;
   margin: 40px auto;
@@ -1095,6 +1294,70 @@ h1 {
 .flow-list strong {
   color: white;
   font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .docs-layout {
+    flex-direction: column;
+  }
+
+  .docs-sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 16px 0;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0 16px;
+    gap: 8px;
+  }
+
+  .nav-tab {
+    white-space: nowrap;
+    min-width: fit-content;
+  }
+
+  .nav-tab:hover {
+    transform: translateY(-2px);
+  }
+
+  .docs-content {
+    max-width: 100%;
+    padding: 24px 16px;
+  }
+
+  .tab-content {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    padding: 16px 20px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .docs-section-main {
+    padding: 24px 20px;
+  }
+
+  .docs-section-main h2 {
+    font-size: 24px;
+  }
+
+  .docs-section-main h3 {
+    font-size: 18px;
+  }
 }
 </style>
 

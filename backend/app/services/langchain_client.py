@@ -1,10 +1,16 @@
 from typing import List, Any
+import warnings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from app.core.config import settings
 from app.models.agent import Agent
 from app.models.message import Message
+
+# Suppress specific warnings from langchain/google libraries
+warnings.filterwarnings('ignore', message='.*Unrecognized FinishReason enum value.*')
+warnings.filterwarnings('ignore', message='.*Unrecognized role.*')
+warnings.filterwarnings('ignore', message='.*Gemini produced an empty response.*')
 
 
 class LangchainAgentService:
@@ -59,15 +65,31 @@ class LangchainAgentService:
     
     Merges consecutive messages from the same role (Gemini requirement).
     If latest_input is provided, it's merged with the last user message if present.
+    Filters out invalid messages (empty content or invalid roles).
     """
     # Limit history to last 8 messages for performance
     recent_history = history[-8:] if len(history) > 8 else history
     
     messages: List[Any] = []
     
-    # Process history messages
+    # Process history messages - filter out invalid ones
     for m in recent_history:
-      current_role = m.role.value
+      # Skip messages with empty or invalid content
+      if not m.content or not m.content.strip():
+        continue
+      
+      # Validate role
+      try:
+        current_role = m.role.value if hasattr(m.role, 'value') else str(m.role)
+        if not current_role or current_role not in ['user', 'assistant', 'system']:
+          continue
+      except (AttributeError, ValueError):
+        # Skip messages with invalid roles
+        continue
+      
+      # Skip system messages (they're handled separately)
+      if current_role == "system":
+        continue
       
       # Add new message or merge with last if same role
       if messages and messages[-1].__class__.__name__ == ("HumanMessage" if current_role == "user" else "AIMessage"):
@@ -76,18 +98,18 @@ class LangchainAgentService:
       else:
         # Add new message
         if current_role == "user":
-          messages.append(HumanMessage(content=m.content))
+          messages.append(HumanMessage(content=m.content.strip()))
         elif current_role == "assistant":
-          messages.append(AIMessage(content=m.content))
+          messages.append(AIMessage(content=m.content.strip()))
     
     # If latest_input is provided, merge with last user message or add as new
-    if latest_input:
+    if latest_input and latest_input.strip():
       if messages and isinstance(messages[-1], HumanMessage):
         # Merge with last user message
-        messages[-1].content += f"\n\n{latest_input}"
+        messages[-1].content += f"\n\n{latest_input.strip()}"
       else:
         # Add as new user message
-        messages.append(HumanMessage(content=latest_input))
+        messages.append(HumanMessage(content=latest_input.strip()))
     
     return messages
 
@@ -179,6 +201,108 @@ class LangchainAgentService:
       
       return output
       
+    except AttributeError as e:
+      # Handle finish_reason AttributeError (unrecognized enum value from Gemini)
+      error_str = str(e).lower()
+      if "'int' object has no attribute 'name'" in str(e) or "finish_reason" in error_str:
+        print(f"Warning: Unrecognized finish_reason from Gemini, attempting fallback...")
+        # Try using the LLM directly without the chain to bypass the finish_reason processing
+        try:
+          llm = self._build_llm(agent)
+          # Build a simple prompt from history and current input
+          prompt_parts = []
+          for msg in history_for_chain:
+            if isinstance(msg, HumanMessage):
+              prompt_parts.append(f"User: {msg.content}")
+            elif isinstance(msg, AIMessage):
+              prompt_parts.append(f"Assistant: {msg.content}")
+          
+          prompt_parts.append(f"User: {current_input}")
+          prompt_parts.append("Assistant:")
+          
+          full_prompt = "\n".join(prompt_parts)
+          if agent.system_prompt:
+            full_prompt = f"{agent.system_prompt}\n\n{full_prompt}"
+          
+          # Use invoke directly on LLM
+          result = llm.invoke(full_prompt)
+          output = result.content if hasattr(result, 'content') else str(result)
+          
+          # Clean quiz output if present
+          if "**Question 1:**" in output or "Question 1:" in output:
+            quiz_start = output.find("**Question 1:**")
+            if quiz_start == -1:
+              quiz_start = output.find("Question 1:")
+            if quiz_start > 0:
+              output = output[quiz_start:].strip()
+          
+          return output
+        except Exception as fallback_error:
+          print(f"Fallback also failed: {str(fallback_error)}")
+          # Final fallback: Use raw Google Generative AI SDK to bypass LangChain entirely
+          try:
+            import google.generativeai as genai
+            genai.configure(api_key=self._api_key)
+            
+            # Build conversation history in Gemini format
+            conversation_parts = []
+            
+            # Add system prompt to first message if available
+            system_context = agent.system_prompt or ""
+            
+            # Convert history to Gemini format
+            for msg in history_for_chain:
+              if isinstance(msg, HumanMessage):
+                conversation_parts.append({"role": "user", "parts": [msg.content]})
+              elif isinstance(msg, AIMessage):
+                conversation_parts.append({"role": "model", "parts": [msg.content]})
+            
+            # Add current input
+            conversation_parts.append({"role": "user", "parts": [current_input]})
+            
+            # Initialize model
+            model_instance = genai.GenerativeModel(
+              model_name=agent.model,
+              generation_config={
+                "temperature": agent.temperature,
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_output_tokens": 8192,
+              }
+            )
+            
+            # Prepend system context to first user message if exists
+            if system_context.strip() and conversation_parts and conversation_parts[0]["role"] == "user":
+              conversation_parts[0]["parts"][0] = f"{system_context.strip()}\n\n{conversation_parts[0]['parts'][0]}"
+            
+            # Start chat with history (all but last message)
+            if len(conversation_parts) > 1:
+              chat = model_instance.start_chat(history=conversation_parts[:-1])
+              # Send the last message (current user message)
+              response = chat.send_message(conversation_parts[-1]["parts"][0])
+            else:
+              # No history, just send the message
+              prompt = system_context.strip() + "\n\n" + conversation_parts[0]["parts"][0] if system_context.strip() else conversation_parts[0]["parts"][0]
+              response = model_instance.generate_content(prompt)
+            
+            output = response.text
+            
+            # Clean quiz output if present
+            if "**Question 1:**" in output or "Question 1:" in output:
+              quiz_start = output.find("**Question 1:**")
+              if quiz_start == -1:
+                quiz_start = output.find("Question 1:")
+              if quiz_start > 0:
+                output = output[quiz_start:].strip()
+            
+            return output
+          except Exception as final_error:
+            print(f"Final fallback also failed: {str(final_error)}")
+            # Last resort: return a simple error message
+            raise Exception(f"Error generating response (finish_reason issue): {str(e)}. All fallback attempts failed. Please try again.") from e
+      else:
+        raise Exception(f"Error generating response: {str(e)}") from e
+      
     except Exception as e:
       error_str = str(e).lower()
       
@@ -223,5 +347,34 @@ class LangchainAgentService:
         content = chunk.content if hasattr(chunk, 'content') else str(chunk)
         if content:
           yield content
+    except AttributeError as e:
+      # Handle finish_reason AttributeError (unrecognized enum value from Gemini)
+      if "'int' object has no attribute 'name'" in str(e) or "finish_reason" in str(e).lower():
+        print(f"Warning: Unrecognized finish_reason in streaming, attempting fallback...")
+        # Fallback: use LLM directly for streaming
+        try:
+          llm = self._build_llm(agent)
+          # Build a simple prompt from history and current input
+          prompt_parts = []
+          for msg in history_for_chain:
+            if isinstance(msg, HumanMessage):
+              prompt_parts.append(f"User: {msg.content}")
+            elif isinstance(msg, AIMessage):
+              prompt_parts.append(f"Assistant: {msg.content}")
+          
+          prompt_parts.append(f"User: {current_input}")
+          prompt_parts.append("Assistant:")
+          
+          full_prompt = "\n".join(prompt_parts)
+          if agent.system_prompt:
+            full_prompt = f"{agent.system_prompt}\n\n{full_prompt}"
+          
+          # Stream from LLM directly
+          async for chunk in llm.astream(full_prompt):
+            content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            if content:
+              yield content
+        except Exception as fallback_error:
+          yield f"Error: Failed to generate response due to finish_reason issue. Please try again."
     except Exception as e:
       yield f"Error: {str(e)}"
