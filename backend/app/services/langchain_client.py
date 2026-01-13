@@ -138,15 +138,8 @@ class LangchainAgentService:
         from app.tools.prebuilt_agents import _generate_quiz
         try:
           quiz_output = _generate_quiz(topic=topic, difficulty=difficulty, num_questions=num_questions)
-          # Remove answers from quiz output before displaying to users
-          # Answers are kept in backend for validation but hidden from users
-          # Remove **Answer:** lines
-          quiz_output = re.sub(r'\*\*Answer:\*\*\s*[A-D]\s*\n?', '', quiz_output, flags=re.IGNORECASE)
-          # Remove Answer: lines (without bold)
-          quiz_output = re.sub(r'Answer:\s*[A-D]\s*\n?', '', quiz_output, flags=re.IGNORECASE)
-          # Clean up any double newlines that might result
-          quiz_output = re.sub(r'\n{3,}', '\n\n', quiz_output)
-          quiz_output = quiz_output.strip()
+          # Keep answers in the response - they're needed for validation
+          # Answers will be hidden in the UI but available for validation
           return quiz_output
         except Exception as e:
           # Fallback to normal generation if tool fails
@@ -176,24 +169,13 @@ class LangchainAgentService:
       )
       output = result.content if hasattr(result, 'content') else str(result)
       
-      # Clean quiz output if present
+      # Clean quiz output if present - only remove preamble, keep answers for validation
       if "**Question 1:**" in output or "Question 1:" in output:
         quiz_start = output.find("**Question 1:**")
         if quiz_start == -1:
           quiz_start = output.find("Question 1:")
         if quiz_start > 0:
           output = output[quiz_start:].strip()
-        
-        # Remove answers from quiz output before displaying to users
-        # Answers are kept in backend for validation but hidden from users
-        import re
-        # Remove **Answer:** lines
-        output = re.sub(r'\*\*Answer:\*\*\s*[A-D]\s*\n?', '', output, flags=re.IGNORECASE)
-        # Remove Answer: lines (without bold)
-        output = re.sub(r'Answer:\s*[A-D]\s*\n?', '', output, flags=re.IGNORECASE)
-        # Clean up any double newlines that might result
-        output = re.sub(r'\n{3,}', '\n\n', output)
-        output = output.strip()
       
       return output
       

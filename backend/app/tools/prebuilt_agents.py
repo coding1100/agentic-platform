@@ -45,13 +45,14 @@ def _generate_quiz(topic: str, difficulty: str = "medium", num_questions: int = 
     quiz_prompt = f"""Generate a complete multiple-choice quiz with {num_questions} questions about "{topic}" at {difficulty} difficulty level.
 
 CRITICAL REQUIREMENTS - FOLLOW EXACTLY:
-1. Start IMMEDIATELY with **Question 1:** - NO text before it
-2. NO preamble, NO introduction, NO conversational text
-3. NO emojis, NO special characters except **Question** and **Answer** markers
-4. Each question must have exactly 4 options labeled A), B), C), D)
-5. Each option must be on its own line
-6. Include **Answer:** [letter] immediately after each question's options
-7. End after the last answer - NO closing text
+1. ALL questions MUST be specifically about "{topic}" - do NOT include questions about unrelated topics
+2. Start IMMEDIATELY with **Question 1:** - NO text before it
+3. NO preamble, NO introduction, NO conversational text
+4. NO emojis, NO special characters except **Question** and **Answer** markers
+5. Each question must have exactly 4 options labeled A), B), C), D)
+6. Each option must be on its own line
+7. Include **Answer:** [letter] immediately after each question's options
+8. End after the last answer - NO closing text
 
 OUTPUT FORMAT (generate ALL {num_questions} questions in this exact format):
 

@@ -274,7 +274,14 @@ const responseType = ref<'mcq' | 'typing'>('mcq')
 const showResult = ref(false)
 const isValidatingAnswer = ref(false)
 const aiValidationResponse = ref<string | null>(null)
-const answers = ref<Record<number, { selected: string; correct: string; attempts: number; isCorrect?: boolean }>>({})
+const answers = ref<Record<number, { 
+  selected: string; // User's selected answer (letter for MCQ, text for typing)
+  selectedLetter: string; // User's selected letter (for MCQ)
+  correctLetter: string; // Correct answer letter
+  correctText: string; // Correct answer text
+  attempts: number; 
+  isCorrect?: boolean 
+}>>({})
 const results = ref<{ correct: number; total: number; percentage: number; weakAreas: string[] } | null>(null)
 const isSpeaking = ref(false)
 const currentAudio = ref<HTMLAudioElement | null>(null)
@@ -316,13 +323,22 @@ const questionTextOnly = computed(() => {
 const isLastQuestion = computed(() => currentQuestionIndex.value === questions.value.length - 1)
 const wrongAttempts = computed(() => answers.value[currentQuestionIndex.value]?.attempts || 0)
 const isCorrect = computed(() => {
+  const question = currentQuestion.value
   const answer = answers.value[currentQuestionIndex.value]
   if (!answer) return false
-  // Use the stored isCorrect flag from AI validation, or fallback to comparison
+  
+  // Use the stored isCorrect flag from AI validation (most reliable)
   if (answer.isCorrect !== undefined) {
     return answer.isCorrect
   }
-  return answer.selected.toLowerCase().trim() === answer.correct.toLowerCase().trim()
+  
+  // Fallback: Compare letters for MCQ, text for typing
+  if (responseType.value === 'mcq' && answer.selectedLetter && answer.correctLetter) {
+    return answer.selectedLetter === answer.correctLetter
+  }
+  
+  // For typing answers, compare text
+  return answer.selected.toLowerCase().trim() === answer.correctText.toLowerCase().trim()
 })
 
 const adaptiveExplanation = computed(() => {
@@ -380,14 +396,24 @@ function selectLevel(level: Level) {
 
 async function requestQuiz() {
   const agentId = route.params.agentId as string
-  if (!agentId || !tutorStore.currentLevel) return
+  if (!agentId || !tutorStore.currentLevel || !props.topic) return
 
   isLoadingQuiz.value = true
   quizError.value = null
 
   try {
     const difficulty = tutorStore.currentLevel.difficulty
-    const message = `Generate a quiz about ${props.topic?.name.toLowerCase()} with 5 multiple choice questions at ${difficulty} difficulty level. Use the generate_quiz tool.`
+    const topicName = props.topic.name
+    const subject = tutorStore.selectedSubject || 'math'
+    
+    // Create a clear, specific quiz request with topic and subject context
+    const message = `Generate a quiz about ${topicName} (${subject} subject) with exactly 5 multiple choice questions at ${difficulty} difficulty level. 
+
+IMPORTANT: 
+- The quiz must be specifically about "${topicName}" in ${subject}
+- Use the generate_quiz tool
+- Generate exactly 5 questions
+- Difficulty level: ${difficulty}`
     
     const result = await chatStore.sendMessage(
       agentId,
@@ -436,12 +462,25 @@ async function pollForQuizResponse(maxAttempts = 20, delay = 1000) {
               
               if (parsed.hasQuiz && parsed.questions.length > 0) {
                 console.log('✅ Quiz found! Setting up questions...')
+                console.log('Parsed questions with answers:', parsed.questions.map(q => ({
+                  question: q.question.substring(0, 50),
+                  answer: q.answer,
+                  options: q.options.map(opt => opt.letter)
+                })))
+                
+                // Check if any questions are missing answers
+                const questionsWithoutAnswers = parsed.questions.filter(q => !q.answer)
+                if (questionsWithoutAnswers.length > 0) {
+                  console.error('⚠️ WARNING: Some questions are missing answers!', questionsWithoutAnswers.length)
+                  console.error('Raw quiz content sample:', message.content.substring(0, 500))
+                }
+                
                 currentQuiz.value = message.content
                 questions.value = parsed.questions.map(q => {
                   // Get the correct answer text from options if available
                   let correctAnswerText = q.answer || ''
                   if (q.options.length > 0 && correctAnswerText) {
-                    const correctOption = q.options.find(opt => opt.letter === correctAnswerText)
+                    const correctOption = q.options.find(opt => opt.letter.toUpperCase() === correctAnswerText.toUpperCase())
                     if (correctOption) {
                       correctAnswerText = correctOption.text
                     }
@@ -565,18 +604,26 @@ function startQuiz() {
 }
 
 function selectAnswer(letter: string) {
-  if (showResult.value) return
+  // Prevent multiple calls - check if already validating or result shown
+  if (showResult.value || isValidatingAnswer.value) return
   selectedAnswer.value = letter
   checkAnswer(letter)
 }
 
 function submitTypedAnswer() {
-  if (!typedAnswer.value.trim() || showResult.value) return
+  // Prevent multiple calls - check if already validating or result shown
+  if (!typedAnswer.value.trim() || showResult.value || isValidatingAnswer.value) return
   checkAnswer(typedAnswer.value.trim())
 }
 
 async function checkAnswer(answer: string) {
-  // Don't show result yet - wait for AI validation
+  // Guard: Prevent multiple concurrent API calls
+  if (isValidatingAnswer.value || showResult.value) {
+    console.log('Validation already in progress or result already shown, skipping...')
+    return
+  }
+  
+  // Show loading state immediately
   isValidatingAnswer.value = true
   aiValidationResponse.value = null
   
@@ -590,7 +637,70 @@ async function checkAnswer(answer: string) {
   }
   
   // Get the correct answer letter from the question
-  const correctAnswerLetter = question.answer || ''
+  let correctAnswerLetter = question.answer || ''
+  
+  // If answer is missing, try to extract it from raw quiz content as fallback
+  if (!correctAnswerLetter && currentQuiz.value) {
+    console.warn('⚠️ Answer not found in parsed question, attempting to extract from raw content...')
+    
+    // Try to re-parse the quiz content to extract answers
+    const rawParsed = parseQuiz(currentQuiz.value)
+    if (rawParsed.questions && rawParsed.questions.length > questionIndex) {
+      const rawQuestion = rawParsed.questions[questionIndex]
+      if (rawQuestion.answer) {
+        console.log(`✅ Found answer "${rawQuestion.answer}" from raw content`)
+        correctAnswerLetter = rawQuestion.answer
+        // Update the question object with the found answer
+        questions.value[questionIndex].answer = rawQuestion.answer
+      }
+    }
+    
+    // If still no answer, try to extract directly from raw content using regex
+    if (!correctAnswerLetter && currentQuiz.value) {
+      const questionNum = questionIndex + 1
+      // Look for answer after this specific question
+      const questionMarker = `**Question ${questionNum}:**`
+      const nextQuestionMarker = `**Question ${questionNum + 1}:**`
+      
+      const questionStart = currentQuiz.value.indexOf(questionMarker)
+      const questionEnd = currentQuiz.value.indexOf(nextQuestionMarker, questionStart)
+      const questionSection = questionEnd > 0 
+        ? currentQuiz.value.substring(questionStart, questionEnd)
+        : currentQuiz.value.substring(questionStart)
+      
+      // Try to find answer in this section
+      const answerMatch = questionSection.match(/\*\*Answer:\*\*\s*([A-D])/i) || 
+                          questionSection.match(/Answer:\s*([A-D])/i)
+      if (answerMatch && answerMatch[1]) {
+        correctAnswerLetter = answerMatch[1].toUpperCase()
+        console.log(`✅ Extracted answer "${correctAnswerLetter}" using regex fallback`)
+        // Update the question object
+        questions.value[questionIndex].answer = correctAnswerLetter
+      }
+    }
+  }
+  
+    // If still no answer after all attempts, show error (with small delay to show loading)
+    if (!correctAnswerLetter) {
+      console.error('❌ CRITICAL ERROR: Could not find answer after all attempts!', {
+        questionIndex,
+        questionText: question.question?.substring(0, 100),
+        hasRawContent: !!currentQuiz.value,
+        rawContentSample: currentQuiz.value?.substring(0, 1000),
+        allQuestionsAnswers: questions.value.map((q, idx) => ({
+          index: idx,
+          answer: q.answer
+        }))
+      })
+      
+      // Small delay to show loading state before error
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      isValidatingAnswer.value = false
+      aiValidationResponse.value = 'Error: Quiz answer not found. The quiz may be corrupted. Please restart the quiz.'
+      showResult.value = true
+      return
+    }
   
   // Get the full correct answer text for display
   let correctAnswerText = correctAnswerLetter
@@ -598,6 +708,11 @@ async function checkAnswer(answer: string) {
     const correctOption = question.options.find(opt => opt.letter.toUpperCase() === correctAnswerLetter.toUpperCase())
     if (correctOption) {
       correctAnswerText = correctOption.text
+    } else {
+      console.warn(`⚠️ Could not find option for letter "${correctAnswerLetter}"`, {
+        availableOptions: question.options.map(opt => opt.letter),
+        correctAnswerLetter
+      })
     }
   }
   
@@ -610,7 +725,7 @@ async function checkAnswer(answer: string) {
     }
   }
   
-  // Validate answer using AI
+  // Validate answer using AI (which will use direct comparison first)
   const validationResult = await validateAnswerWithAI(
     question.question, 
     userAnswerText, 
@@ -620,23 +735,31 @@ async function checkAnswer(answer: string) {
     answer
   )
   
-  console.log('AI Validation Result:', validationResult)
-  console.log('Question:', question.question)
-  console.log('User Answer:', userAnswerText, 'Letter:', answer)
-  console.log('Correct Answer:', correctAnswerText, 'Letter:', correctAnswerLetter)
+  console.log('✅ Validation Result:', {
+    isCorrect: validationResult.isCorrect,
+    response: validationResult.response,
+    userAnswer: userAnswerText,
+    userLetter: answer,
+    correctAnswer: correctAnswerText,
+    correctLetter: correctAnswerLetter
+  })
   
-  // Store the answer with both letter and text for proper display
+  // Store the answer with both letter and text for proper validation
   if (!answers.value[questionIndex]) {
     answers.value[questionIndex] = {
-      selected: answer,
-      correct: correctAnswerText,
+      selected: responseType.value === 'mcq' ? answer : userAnswerText,
+      selectedLetter: responseType.value === 'mcq' ? answer.toUpperCase() : '',
+      correctLetter: correctAnswerLetter.toUpperCase(),
+      correctText: correctAnswerText,
       attempts: 0,
       isCorrect: validationResult.isCorrect
     }
+  } else {
+    answers.value[questionIndex].selected = responseType.value === 'mcq' ? answer : userAnswerText
+    answers.value[questionIndex].selectedLetter = responseType.value === 'mcq' ? answer.toUpperCase() : ''
   }
   
   answers.value[questionIndex].attempts++
-  answers.value[questionIndex].selected = answer
   answers.value[questionIndex].isCorrect = validationResult.isCorrect
   
   // Store AI response
@@ -675,12 +798,26 @@ async function validateAnswerWithAI(
   try {
     const agentId = route.params.agentId as string
     
-    // For MCQ, check if letters match first (faster)
+    // For MCQ, check if letters match first (fastest and most reliable)
     if (options.length > 0 && correctAnswerLetter && userAnswerLetter) {
-      if (correctAnswerLetter.toUpperCase() === userAnswerLetter.toUpperCase()) {
-        return { isCorrect: true, response: 'Your answer matches the correct option!' }
+      const isCorrect = correctAnswerLetter.toUpperCase() === userAnswerLetter.toUpperCase()
+      console.log(`Direct comparison: User="${userAnswerLetter}", Correct="${correctAnswerLetter}", Match=${isCorrect}`)
+      if (isCorrect) {
+        return { isCorrect: true, response: 'Your answer is correct! Great job!' }
+      } else {
+        // If wrong, we can still use AI for explanation, but return immediately if we want fast feedback
+        // For now, let's return immediately with the correct answer
+        const correctOption = options.find(opt => opt.letter.toUpperCase() === correctAnswerLetter.toUpperCase())
+        const correctText = correctOption ? correctOption.text : correctAnswerLetter
+        return { 
+          isCorrect: false, 
+          response: `The correct answer is ${correctAnswerLetter}) ${correctText}. Please review and try again.` 
+        }
       }
     }
+    
+    // If we don't have answer letters, try to use AI validation
+    console.warn('Missing answer letters, attempting AI validation. CorrectLetter:', correctAnswerLetter, 'UserLetter:', userAnswerLetter)
     
     // Build validation prompt
     let validationPrompt = `Please validate if the student's answer is correct for this question:
@@ -722,20 +859,32 @@ Start with **VALIDATION:** followed by either CORRECT or INCORRECT, then **EXPLA
     if (result.success) {
       // Poll for the validation response
       const validationResult = await pollForValidation()
-      return validationResult
+      
+      // If polling returned a valid result (not a fallback message), use it
+      if (validationResult.response && !validationResult.response.includes('not received') && !validationResult.response.includes('Could not validate')) {
+        return validationResult
+      }
+      
+      // If polling failed, fall through to direct comparison
+      console.log('Polling did not return valid result, using direct comparison')
     }
     
     // Fallback to simple comparison if AI validation fails
+    console.log('AI validation failed, using fallback comparison')
     let isCorrect = false
     if (correctAnswerLetter && userAnswerLetter) {
       isCorrect = correctAnswerLetter.toUpperCase() === userAnswerLetter.toUpperCase()
+      console.log(`Fallback: Comparing letters - User: ${userAnswerLetter}, Correct: ${correctAnswerLetter}, Match: ${isCorrect}`)
     } else {
       isCorrect = userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim()
+      console.log(`Fallback: Comparing text - User: "${userAnswer}", Correct: "${correctAnswer}", Match: ${isCorrect}`)
     }
     
     return { 
       isCorrect, 
-      response: isCorrect ? 'Answer validated successfully.' : 'Answer does not match the correct solution.' 
+      response: isCorrect 
+        ? 'Your answer is correct!' 
+        : `The correct answer is ${correctAnswerLetter || correctAnswer}. ${isCorrect ? '' : 'Please try again.'}` 
     }
   } catch (error) {
     console.error('AI validation error:', error)
@@ -743,19 +892,31 @@ Start with **VALIDATION:** followed by either CORRECT or INCORRECT, then **EXPLA
     let isCorrect = false
     if (correctAnswerLetter && userAnswerLetter) {
       isCorrect = correctAnswerLetter.toUpperCase() === userAnswerLetter.toUpperCase()
+      console.log(`Error fallback: Comparing letters - User: ${userAnswerLetter}, Correct: ${correctAnswerLetter}, Match: ${isCorrect}`)
     } else {
       isCorrect = userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim()
+      console.log(`Error fallback: Comparing text - User: "${userAnswer}", Correct: "${correctAnswer}", Match: ${isCorrect}`)
     }
     
     return { 
       isCorrect, 
-      response: 'Validation completed using fallback method.' 
+      response: isCorrect 
+        ? 'Your answer is correct!' 
+        : `The correct answer is ${correctAnswerLetter || correctAnswer}. Please review and try again.` 
     }
   }
 }
 
 async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCorrect: boolean; response: string }> {
+  // Track if we've already found a validation result to prevent multiple returns
+  let validationFound = false
+  
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // If validation is no longer in progress, stop polling
+    if (!isValidatingAnswer.value || showResult.value) {
+      break
+    }
+    
     if (tutorStore.conversationId) {
       try {
         await chatStore.fetchConversation(tutorStore.conversationId)
@@ -772,7 +933,8 @@ async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCor
               const validationMatch = content.match(/\*\*VALIDATION:\*\*\s*(CORRECT|INCORRECT)/i)
               const explanationMatch = content.match(/\*\*EXPLANATION:\*\*\s*(.+?)(?=\*\*|$)/is)
               
-              if (validationMatch) {
+              if (validationMatch && !validationFound) {
+                validationFound = true
                 const isCorrect = validationMatch[1].toUpperCase() === 'CORRECT'
                 const explanation = explanationMatch ? explanationMatch[1].trim() : (isCorrect ? 'Your answer is correct!' : 'Your answer needs correction.')
                 return { isCorrect, response: explanation }
@@ -796,7 +958,8 @@ async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCor
                        !upper.includes('RESPOND')
               })
               
-              if (correctLine && !incorrectLine) {
+              if (correctLine && !incorrectLine && !validationFound) {
+                validationFound = true
                 // Find explanation text
                 const explanation = lines.find(line => 
                   !line.toUpperCase().includes('VALIDATION') && 
@@ -807,7 +970,8 @@ async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCor
                   line.trim().length > 10
                 ) || 'Your answer is correct!'
                 return { isCorrect: true, response: explanation.trim() }
-              } else if (incorrectLine) {
+              } else if (incorrectLine && !validationFound) {
+                validationFound = true
                 const explanation = lines.find(line => 
                   !line.toUpperCase().includes('VALIDATION') && 
                   !line.toUpperCase().includes('CORRECT') &&
@@ -829,8 +993,13 @@ async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCor
     await new Promise(resolve => setTimeout(resolve, delay))
   }
   
-  // Default to incorrect if we can't determine
-  return { isCorrect: false, response: 'Could not validate answer. Please try again.' }
+  // If we get here, validation wasn't found - use fallback comparison
+  // This should not happen often, but if polling fails, we'll compare directly
+  console.warn('Validation polling completed but no result found, using fallback comparison')
+  
+  // Return a fallback that will trigger the comparison in validateAnswerWithAI
+  // The caller should handle this by using the letter comparison
+  return { isCorrect: false, response: 'Validation response not received. Using direct comparison...' }
 }
 
 async function speakText(text: string) {
@@ -880,13 +1049,28 @@ function calculateResults() {
   questions.value.forEach((question, index) => {
     const answer = answers.value[index]
     if (answer) {
-      const isCorrect = answer.selected.toLowerCase().trim() === answer.correct.toLowerCase().trim()
-      if (isCorrect) {
+      // Use isCorrect flag if available (from AI validation)
+      let isAnswerCorrect = false
+      if (answer.isCorrect !== undefined) {
+        isAnswerCorrect = answer.isCorrect
+      } else {
+        // Fallback: Compare based on answer type
+        if (answer.selectedLetter && answer.correctLetter) {
+          // MCQ: Compare letters
+          isAnswerCorrect = answer.selectedLetter === answer.correctLetter
+        } else {
+          // Typing: Compare text
+          isAnswerCorrect = answer.selected.toLowerCase().trim() === answer.correctText.toLowerCase().trim()
+        }
+      }
+      
+      if (isAnswerCorrect) {
         correct++
       } else {
         weakAreas.push(`Question ${index + 1}`)
       }
     } else {
+      // No answer provided
       weakAreas.push(`Question ${index + 1}`)
     }
   })
@@ -1317,64 +1501,85 @@ h2 {
 }
 
 .result-feedback {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
 }
 
 .feedback {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  margin-bottom: 16px;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
 }
 
 .feedback.correct {
-  background: rgba(76, 175, 80, 0.2);
-  border: 1px solid rgba(76, 175, 80, 0.4);
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.25), rgba(56, 142, 60, 0.25));
+  border: 2px solid rgba(76, 175, 80, 0.5);
+  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.2);
 }
 
 .feedback.incorrect {
-  background: rgba(244, 67, 54, 0.2);
-  border: 1px solid rgba(244, 67, 54, 0.4);
+  background: linear-gradient(135deg, rgba(244, 67, 54, 0.25), rgba(211, 47, 47, 0.25));
+  border: 2px solid rgba(244, 67, 54, 0.5);
+  box-shadow: 0 4px 20px rgba(244, 67, 54, 0.2);
 }
 
 .feedback-icon {
-  font-size: 24px;
+  font-size: 28px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  flex-shrink: 0;
 }
 
 .feedback-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .feedback-text {
   color: white;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.6;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .hint-section {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 152, 0, 0.2));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  border-radius: 12px;
+  margin-top: 12px;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.15);
+}
+
+.hint-section strong {
+  color: white;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 6px;
+  font-size: 16px;
 }
 
 .validating-answer {
   margin-top: 24px;
   padding: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+  backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .validating-content {
@@ -1385,18 +1590,21 @@ h2 {
 }
 
 .validating-content p {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 16px;
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
   margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .spinner-small {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.2);
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 @keyframes spin {
@@ -1404,51 +1612,68 @@ h2 {
 }
 
 .ai-response {
-  margin-top: 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
+  line-height: 1.7;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ai-response strong {
   color: white;
+  font-weight: 700;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  font-size: 16px;
 }
 
 .feedback-actions {
   display: flex;
   gap: 12px;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .btn-retry,
 .btn-next {
-  padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10px);
+  padding: 14px 28px;
+  backdrop-filter: blur(15px);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
-  flex: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .btn-retry {
-  background: rgba(255, 193, 7, 0.3);
-  border-color: rgba(255, 193, 7, 0.5);
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.25), rgba(255, 152, 0, 0.25));
+  border: 2px solid rgba(255, 193, 7, 0.5);
 }
 
 .btn-retry:hover {
-  background: rgba(255, 193, 7, 0.4);
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.35), rgba(255, 152, 0, 0.35));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 193, 7, 0.3);
+}
+
+.btn-next {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.25), rgba(56, 142, 60, 0.25));
+  border: 2px solid rgba(76, 175, 80, 0.5);
 }
 
 .btn-next:hover {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.35), rgba(56, 142, 60, 0.35));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
   background: rgba(255, 255, 255, 0.35);
   transform: translateY(-2px);
 }

@@ -18,14 +18,6 @@
           <span class="proficiency-description">{{ level.description }}</span>
         </button>
       </div>
-      
-      <button
-        @click="handleSubmit"
-        class="btn-primary"
-        :disabled="!selectedProficiency"
-      >
-        Continue
-      </button>
     </div>
   </div>
 </template>
@@ -73,6 +65,8 @@ const proficiencyLevels = [
 
 function selectProficiency(level: 'beginner' | 'intermediate' | 'advanced') {
   selectedProficiency.value = level
+  // Automatically submit when an option is selected
+  handleSubmit()
 }
 
 function handleSubmit() {

@@ -265,27 +265,45 @@ export function parseQuiz(content: string): ParsedQuiz {
       }
     }
 
-    // Extract answer - try multiple patterns
+    // Extract answer - try multiple patterns with improved matching
     let answer: string | undefined
     
-    // Pattern 1: **Answer:** format
+    // Pattern 1: **Answer:** format (with optional whitespace/newlines)
     answerPattern.lastIndex = 0
     const answerMatch = questionSection.match(answerPattern)
     if (answerMatch && answerMatch[1]) {
-      answer = answerMatch[1].toUpperCase()
+      answer = answerMatch[1].toUpperCase().trim()
     } else {
-      // Pattern 2: "Answer: A" format (without bold)
+      // Pattern 2: "Answer: A" format (without bold, with optional whitespace)
       answerPatternAlt.lastIndex = 0
       const altAnswerMatch = questionSection.match(answerPatternAlt)
       if (altAnswerMatch && altAnswerMatch[1]) {
-        answer = altAnswerMatch[1].toUpperCase()
+        answer = altAnswerMatch[1].toUpperCase().trim()
       } else {
-        // Pattern 3: Look for answer in the section more broadly (case-insensitive)
-        const broadAnswerMatch = questionSection.match(/[Aa]nswer[:\s]+([A-Da-d])/i)
+        // Pattern 3: Look for answer in the section more broadly (case-insensitive, multiline)
+        // This handles cases where answer might be on a separate line
+        const broadAnswerMatch = questionSection.match(/[Aa]nswer[:\s]*\n?\s*([A-Da-d])/i)
         if (broadAnswerMatch && broadAnswerMatch[1]) {
-          answer = broadAnswerMatch[1].toUpperCase()
+          answer = broadAnswerMatch[1].toUpperCase().trim()
+        } else {
+          // Pattern 4: Look for standalone answer lines (e.g., "Answer: A" on its own line)
+          const lines = questionSection.split('\n')
+          for (const line of lines) {
+            const lineMatch = line.trim().match(/^(?:\*\*)?Answer:\s*\*?\*?\s*([A-Da-d])\s*$/i)
+            if (lineMatch && lineMatch[1]) {
+              answer = lineMatch[1].toUpperCase().trim()
+              break
+            }
+          }
         }
       }
+    }
+    
+    // Debug: Log if answer is found
+    if (answer) {
+      console.log(`✅ Found answer "${answer}" for question ${qMatch.number}`)
+    } else {
+      console.warn(`⚠️ No answer found for question ${qMatch.number}. Question section sample:`, questionSection.substring(0, 200))
     }
 
     // Only add if we have a valid question
