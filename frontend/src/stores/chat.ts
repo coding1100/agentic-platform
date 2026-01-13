@@ -9,6 +9,8 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const loading = ref(false)
   const sending = ref(false)
+  const lastFetchTime = ref<Record<string, number>>({}) // Track last fetch time per conversation
+  const lastMessageCount = ref<Record<string, number>>({}) // Track last message count per conversation
 
   async function fetchConversations(agentId: string) {
     loading.value = true
@@ -21,12 +23,29 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function fetchConversation(conversationId: string) {
+  async function fetchConversation(conversationId: string, force: boolean = false) {
+    const now = Date.now()
+    const lastFetch = lastFetchTime.value[conversationId] || 0
+    const currentMessageCount = messages.value.length
+    const lastCount = lastMessageCount.value[conversationId] || 0
+    
+    // Skip if we just fetched this conversation recently (within 5 seconds) and message count hasn't changed
+    // unless force is true
+    const MIN_FETCH_INTERVAL = 5000 // 5 seconds minimum between fetches
+    if (!force && now - lastFetch < MIN_FETCH_INTERVAL && currentMessageCount === lastCount && activeConversationId.value === conversationId) {
+      return { success: true, conversation: { id: conversationId, messages: messages.value } }
+    }
+    
     loading.value = true
     try {
       const conversation = await conversationsApi.get(conversationId)
+      const newMessageCount = conversation.messages?.length || 0
+      
       messages.value = conversation.messages || []
       activeConversationId.value = conversationId
+      lastFetchTime.value[conversationId] = now
+      lastMessageCount.value[conversationId] = newMessageCount
+      
       return { success: true, conversation }
     } catch (error: any) {
       return { success: false, error: error.response?.data?.detail || 'Failed to fetch conversation' }

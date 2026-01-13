@@ -7,6 +7,7 @@ PREBUILT_AGENT_SLUGS = {
   "course_creation_agent": "education.course_creation_agent",
   "language_practice_agent": "education.language_practice_agent",
   "micro_learning_agent": "education.micro_learning_agent",
+  "exam_prep_agent": "education.exam_prep_agent",
 }
 
 
@@ -920,6 +921,757 @@ Generate the flashcards now:"""
     return f"Error creating flashcards: {str(e)}. Please try again."
 
 
+# Exam Prep Agent Tools
+def _create_practice_exam(exam_type: str, subject: str, num_questions: int = 50, time_limit: int = 60, difficulty: str = "medium") -> str:
+  """Create a full-length practice exam with various question types.
+  
+  Args:
+    exam_type: Type of exam (SAT, GRE, Certification, Final Exam, etc.)
+    subject: Subject/topic for the exam
+    num_questions: Number of questions (default: 50)
+    time_limit: Time limit in minutes (default: 60)
+    difficulty: Difficulty level (easy, medium, hard, default: "medium")
+  
+  Returns:
+    Complete practice exam with questions, answer key, and scoring rubric.
+  """
+  try:
+    num_questions = max(10, min(100, int(num_questions))) if isinstance(num_questions, (int, float, str)) else 50
+    if isinstance(num_questions, str):
+      try:
+        num_questions = int(num_questions)
+      except (ValueError, TypeError):
+        num_questions = 50
+    num_questions = max(10, min(100, num_questions))
+    
+    time_limit = max(15, min(300, int(time_limit))) if isinstance(time_limit, (int, float, str)) else 60
+    if isinstance(time_limit, str):
+      try:
+        time_limit = int(time_limit)
+      except (ValueError, TypeError):
+        time_limit = 60
+    time_limit = max(15, min(300, time_limit))
+    
+    difficulty = str(difficulty).lower() if difficulty else "medium"
+    exam_type = str(exam_type) if exam_type else "General Exam"
+    subject = str(subject) if subject else "General Knowledge"
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    exam_prompt = f"""Create a complete practice exam for {exam_type} in {subject}.
+
+CRITICAL REQUIREMENTS - FOLLOW EXACTLY:
+1. Generate ALL {num_questions} questions in ONE response
+2. Start IMMEDIATELY with **Question 1:** - NO text before it
+3. NO preamble, NO introduction, NO conversational text like "Here is", "Excellent", etc.
+4. NO emojis or special characters (except **Question** and **Answer** markers)
+5. Each question must have exactly 4 options labeled A), B), C), D) for multiple choice
+6. Include **Answer:** [letter] immediately after each question's options
+7. Generate ALL questions in ONE response - do NOT generate questions one by one
+8. End after the last answer - NO closing text
+
+OUTPUT FORMAT (start directly with Question 1, NO text before):
+
+**Question 1:** [Complete multiple choice question]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+**Answer:** [A, B, C, or D]
+
+**Question 2:** [Complete question - can be multiple choice or short answer]
+A) [Option A] (if multiple choice)
+B) [Option B]
+C) [Option C]
+D) [Option D]
+**Answer:** [Answer]
+
+[Continue for ALL {num_questions} questions...]
+
+**Question {num_questions}:** [Last question]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+**Answer:** [Answer]
+
+STRICT REQUIREMENTS:
+- Start directly with **Question 1:** - NO text before it
+- Generate ALL {num_questions} questions in ONE response
+- Every question must have exactly 4 options labeled A), B), C), D)
+- Each option must be on its own line
+- Include **Answer:** [Letter] immediately after each question's options
+- NO explanations, NO discussions, NO introductory text, NO closing text
+- NO emojis, NO special characters except **Question** and **Answer** markers
+- NO phrases like 'Of course', 'I can help', 'Here is', 'Excellent', etc.
+
+Generate the complete exam now starting with **Question 1:**"""
+    
+    exam_content = gemini_client.generate_response(
+      system_prompt="You are an exam creation expert. Create comprehensive practice exams following the exact format specified. DO NOT add any preamble, introduction, or conversational text. Start directly with the exam format.",
+      messages=[{"role": "user", "content": exam_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    # Clean the response to ensure it starts with Question 1
+    if exam_content:
+      # Find the first question marker
+      question_start = exam_content.find("**Question 1:**")
+      if question_start == -1:
+        question_start = exam_content.find("Question 1:")
+      if question_start == -1:
+        # Try to find any numbered question
+        import re
+        first_question_match = re.search(r'(?:Question|**Question)\s+1[:\-]', exam_content, re.IGNORECASE)
+        if first_question_match:
+          question_start = first_question_match.start()
+      
+      if question_start > 0:
+        # Keep instructions if they're close to the start, otherwise remove preamble
+        if question_start > 500:
+          exam_content = exam_content[question_start:].strip()
+        else:
+          # Instructions are part of the exam, keep them
+          pass
+      
+      # Ensure it ends properly (remove any trailing text after last answer)
+      # Find the last **Answer:** marker
+      last_answer_pos = exam_content.rfind("**Answer:**")
+      if last_answer_pos == -1:
+        last_answer_pos = exam_content.rfind("Answer:")
+      
+      if last_answer_pos > 0:
+        # Extract up to 100 characters after the last answer (to include the answer letter and explanation)
+        remaining = exam_content[last_answer_pos:]
+        lines = remaining.split('\n')
+        # Keep answer lines but remove everything after scoring rubric or unrelated content
+        rubric_pos = remaining.find("Scoring Rubric")
+        if rubric_pos > 0:
+          exam_content = exam_content[:last_answer_pos] + remaining[:rubric_pos + 200]  # Keep rubric
+        else:
+          # Keep up to 3 lines after answer
+          answer_section = '\n'.join(lines[:3])
+          exam_content = exam_content[:last_answer_pos] + answer_section
+    
+    return exam_content if exam_content else f"# Practice Exam: {exam_type} - {subject}\n\n## Exam Instructions\n- Time Limit: {time_limit} minutes\n- Total Questions: {num_questions}\n\n## Questions\n**Question 1:** [Question text]\nA) Option A\nB) Option B\nC) Option C\nD) Option D\n\n## Answer Key\n**Question 1:** A - [Explanation]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _create_practice_exam: {traceback.format_exc()}")
+    return f"Error creating practice exam: {str(e)}. Please try again."
+
+
+def _create_study_schedule(exam_date: str, subjects: str, hours_per_day: int = 2, current_level: str = "intermediate") -> str:
+  """Create a personalized study schedule leading up to the exam date.
+  
+  Args:
+    exam_date: Exam date in YYYY-MM-DD format
+    subjects: Comma-separated list of subjects/topics to study
+    hours_per_day: Hours available for study per day (default: 2)
+    current_level: Current knowledge level (beginner, intermediate, advanced, default: "intermediate")
+  
+  Returns:
+    Weekly study schedule with daily goals, topic breakdown, and milestones.
+  """
+  try:
+    from datetime import datetime, timedelta
+    
+    hours_per_day = max(1, min(12, int(hours_per_day))) if isinstance(hours_per_day, (int, float, str)) else 2
+    if isinstance(hours_per_day, str):
+      try:
+        hours_per_day = int(hours_per_day)
+      except (ValueError, TypeError):
+        hours_per_day = 2
+    hours_per_day = max(1, min(12, hours_per_day))
+    
+    current_level = str(current_level).lower() if current_level else "intermediate"
+    subjects_list = [s.strip() for s in str(subjects).split(",")] if subjects else ["General Topics"]
+    
+    # Parse exam date
+    try:
+      exam_dt = datetime.strptime(str(exam_date), "%Y-%m-%d")
+      today = datetime.now()
+      days_until_exam = (exam_dt - today).days
+      if days_until_exam < 1:
+        days_until_exam = 30  # Default to 30 days if date is invalid
+      weeks_until_exam = max(1, days_until_exam // 7)
+    except:
+      days_until_exam = 30
+      weeks_until_exam = 4
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    schedule_prompt = f"""Create a personalized study schedule for an exam on {exam_date}.
+
+PARAMETERS:
+- Days until exam: {days_until_exam} days ({weeks_until_exam} weeks)
+- Subjects to study: {', '.join(subjects_list)}
+- Hours per day: {hours_per_day} hours
+- Current level: {current_level}
+
+CRITICAL REQUIREMENTS:
+1. Create a week-by-week breakdown
+2. Prioritize topics by importance and difficulty
+3. Include practice exam dates
+4. Schedule review sessions
+5. Set milestone checkpoints
+6. Adapt to available study time
+7. Start IMMEDIATELY with schedule overview - NO preamble
+
+OUTPUT FORMAT:
+
+# Study Schedule: Exam on {exam_date}
+
+## Schedule Overview
+- **Exam Date:** {exam_date}
+- **Days Remaining:** {days_until_exam} days
+- **Study Hours/Day:** {hours_per_day} hours
+- **Total Study Hours:** {days_until_exam * hours_per_day} hours
+- **Subjects:** {', '.join(subjects_list)}
+
+## Weekly Breakdown
+
+### Week 1 (Days 1-7)
+**Focus:** [Primary focus for this week]
+**Daily Goals:**
+- Day 1: [Topic 1] - {hours_per_day} hours
+- Day 2: [Topic 2] - {hours_per_day} hours
+- Day 3: [Topic 3] - {hours_per_day} hours
+- Day 4: Review Day - {hours_per_day} hours
+- Day 5: [Topic 4] - {hours_per_day} hours
+- Day 6: [Topic 5] - {hours_per_day} hours
+- Day 7: Practice Questions - {hours_per_day} hours
+
+**Milestone:** [Milestone for this week]
+
+[Continue for all {weeks_until_exam} weeks...]
+
+### Final Week (Last 7 days)
+**Focus:** Review and exam strategies
+- Day 1-3: Comprehensive review
+- Day 4: Full practice exam
+- Day 5-6: Weak area focus
+- Day 7: Final review and strategies
+
+## Practice Exam Schedule
+- Week {weeks_until_exam // 2}: First practice exam
+- Week {weeks_until_exam - 1}: Second practice exam
+- Final week: Final practice exam
+
+## Milestones
+- [ ] Week 1: Complete [milestone]
+- [ ] Week 2: Complete [milestone]
+- [ ] Week {weeks_until_exam}: Ready for exam
+
+Generate the complete study schedule now:"""
+    
+    schedule_content = gemini_client.generate_response(
+      system_prompt="You are a study schedule expert. Create personalized, realistic study schedules for exam preparation.",
+      messages=[{"role": "user", "content": schedule_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return schedule_content if schedule_content else f"# Study Schedule: Exam on {exam_date}\n\n## Schedule Overview\n- Days Remaining: {days_until_exam} days\n- Study Hours/Day: {hours_per_day} hours\n\n## Weekly Breakdown\n[Study schedule will be generated]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _create_study_schedule: {traceback.format_exc()}")
+    return f"Error creating study schedule: {str(e)}. Please try again."
+
+
+def _identify_weak_areas(subject: str, practice_results: str, exam_type: str = "general") -> str:
+  """Analyze practice test results and identify areas needing improvement.
+  
+  Args:
+    subject: Subject/topic area
+    practice_results: Structured text or description of practice test results (scores by topic, question types, etc.)
+    exam_type: Type of exam (default: "general")
+  
+  Returns:
+    Analysis report with weak areas, recommendations, and improvement strategies.
+  """
+  try:
+    subject = str(subject) if subject else "General"
+    exam_type = str(exam_type) if exam_type else "General Exam"
+    practice_results = str(practice_results) if practice_results else "No results provided"
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    analysis_prompt = f"""Analyze practice exam results and identify weak areas for improvement.
+
+PARAMETERS:
+- Subject: {subject}
+- Exam Type: {exam_type}
+- Practice Results: {practice_results[:500]}
+
+CRITICAL REQUIREMENTS:
+1. Identify weak areas ranked by priority
+2. Provide specific topics needing focus
+3. Recommend targeted study materials
+4. Suggest improvement strategies
+5. Set realistic improvement goals
+6. Start IMMEDIATELY with analysis summary - NO preamble
+
+OUTPUT FORMAT:
+
+# Weak Area Analysis: {subject}
+
+## Overall Performance Summary
+- **Overall Score:** [Score/Percentage]
+- **Strongest Areas:** [List 2-3]
+- **Weakest Areas:** [List 2-3]
+
+## Weak Areas (Ranked by Priority)
+
+### 1. [Weak Area 1] - HIGH PRIORITY
+**Current Performance:** [Score/Percentage]
+**Why This Matters:** [Explanation]
+**Specific Topics to Focus On:**
+- [Topic 1]
+- [Topic 2]
+- [Topic 3]
+
+**Recommended Study Materials:**
+- [Material 1]
+- [Material 2]
+
+**Improvement Strategy:**
+- [Strategy 1]
+- [Strategy 2]
+- [Strategy 3]
+
+**Target Improvement:** [Goal score/percentage]
+
+### 2. [Weak Area 2] - MEDIUM PRIORITY
+[Same structure as above]
+
+### 3. [Weak Area 3] - LOW PRIORITY
+[Same structure as above]
+
+## Improvement Action Plan
+1. **Immediate Actions (This Week):**
+   - [Action 1]
+   - [Action 2]
+
+2. **Short-term Goals (Next 2 Weeks):**
+   - [Goal 1]
+   - [Goal 2]
+
+3. **Long-term Goals (Before Exam):**
+   - [Goal 1]
+   - [Goal 2]
+
+## Recommended Study Sequence
+1. Start with: [Weak Area 1]
+2. Then focus on: [Weak Area 2]
+3. Finally review: [Weak Area 3]
+
+Generate the complete analysis now:"""
+    
+    analysis_content = gemini_client.generate_response(
+      system_prompt="You are an exam preparation analyst. Analyze practice results and provide actionable improvement recommendations.",
+      messages=[{"role": "user", "content": analysis_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return analysis_content if analysis_content else f"# Weak Area Analysis: {subject}\n\n## Overall Performance Summary\n- Weakest Areas: [To be analyzed from practice results]\n\n## Weak Areas\n[Analysis will be generated based on practice results]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _identify_weak_areas: {traceback.format_exc()}")
+    return f"Error analyzing weak areas: {str(e)}. Please try again."
+
+
+def _create_exam_strategies(exam_type: str, subject: str, question_format: str = "mixed") -> str:
+  """Provide exam-taking strategies and tips for specific exam types.
+  
+  Args:
+    exam_type: Type of exam (SAT, GRE, Certification, etc.)
+    subject: Subject area
+    question_format: Question format (MCQ, essay, mixed, default: "mixed")
+  
+  Returns:
+    Comprehensive strategy guide with time management, question prioritization, and tips.
+  """
+  try:
+    exam_type = str(exam_type) if exam_type else "General Exam"
+    subject = str(subject) if subject else "General"
+    question_format = str(question_format).lower() if question_format else "mixed"
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    strategy_prompt = f"""Create comprehensive exam-taking strategies for {exam_type} in {subject}.
+
+PARAMETERS:
+- Exam Type: {exam_type}
+- Subject: {subject}
+- Question Format: {question_format}
+
+CRITICAL REQUIREMENTS:
+1. Provide proven exam-taking strategies
+2. Include time management techniques
+3. Explain question prioritization
+4. Cover answer elimination strategies
+5. Include stress management tips
+6. List common pitfalls to avoid
+7. Start IMMEDIATELY with strategy overview - NO preamble
+
+OUTPUT FORMAT:
+
+# Exam Strategies: {exam_type} - {subject}
+
+## Strategy Overview
+- **Exam Type:** {exam_type}
+- **Question Format:** {question_format}
+- **Key Focus:** [Main strategy focus]
+
+## Time Management Strategies
+
+### Overall Time Allocation
+- **Reading Instructions:** [Time]
+- **Question Review:** [Time]
+- **Answering Questions:** [Time]
+- **Review Time:** [Time]
+
+### Per-Question Time Budget
+- Multiple Choice: [Time per question]
+- Short Answer: [Time per question]
+- Essay: [Time per question]
+
+### Time Management Techniques
+1. **Pacing Strategy:**
+   - [Technique 1]
+   - [Technique 2]
+
+2. **Time Checkpoints:**
+   - At 25%: [Checkpoint]
+   - At 50%: [Checkpoint]
+   - At 75%: [Checkpoint]
+
+## Question Prioritization
+
+### Priority Order
+1. **High Priority:** [Question types/topics]
+2. **Medium Priority:** [Question types/topics]
+3. **Low Priority:** [Question types/topics]
+
+### Answer Strategy
+- **Easy Questions First:** [Strategy]
+- **Skip and Return:** [When to skip]
+- **Guess Strategy:** [When and how to guess]
+
+## Answer Elimination Techniques
+
+### For Multiple Choice
+1. **Process of Elimination:**
+   - [Technique 1]
+   - [Technique 2]
+
+2. **Common Distractors:**
+   - [Distractor pattern 1]
+   - [Distractor pattern 2]
+
+## Stress Management
+
+### Before the Exam
+- [Tip 1]
+- [Tip 2]
+- [Tip 3]
+
+### During the Exam
+- [Tip 1]
+- [Tip 2]
+- [Tip 3]
+
+### If You Feel Overwhelmed
+- [Strategy 1]
+- [Strategy 2]
+
+## Common Pitfalls to Avoid
+1. [Pitfall 1] - [How to avoid]
+2. [Pitfall 2] - [How to avoid]
+3. [Pitfall 3] - [How to avoid]
+
+## Subject-Specific Tips for {subject}
+- [Tip 1]
+- [Tip 2]
+- [Tip 3]
+
+## Final Exam Day Checklist
+- [ ] Get adequate sleep
+- [ ] Eat a healthy breakfast
+- [ ] Arrive early
+- [ ] Bring required materials
+- [ ] Stay calm and focused
+
+Generate the complete strategy guide now:"""
+    
+    strategy_content = gemini_client.generate_response(
+      system_prompt="You are an exam strategy expert. Provide proven exam-taking strategies and techniques.",
+      messages=[{"role": "user", "content": strategy_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return strategy_content if strategy_content else f"# Exam Strategies: {exam_type} - {subject}\n\n## Time Management Strategies\n- Budget time per question\n- Leave time for review\n\n## Question Prioritization\n- Answer easy questions first\n- Skip difficult questions and return\n\n## Common Pitfalls to Avoid\n[List of common mistakes]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _create_exam_strategies: {traceback.format_exc()}")
+    return f"Error creating exam strategies: {str(e)}. Please try again."
+
+
+def _generate_topic_review(topic: str, difficulty: str = "medium", review_type: str = "comprehensive") -> str:
+  """Create a focused review session for a specific topic.
+  
+  Args:
+    topic: Topic/subject to review
+    difficulty: Difficulty level (easy, medium, hard, default: "medium")
+    review_type: Type of review (concept, example, practice, comprehensive, default: "comprehensive")
+  
+  Returns:
+    Review content with key concepts, examples, practice questions, and common mistakes.
+  """
+  try:
+    topic = str(topic) if topic else "General Topic"
+    difficulty = str(difficulty).lower() if difficulty else "medium"
+    review_type = str(review_type).lower() if review_type else "comprehensive"
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    review_prompt = f"""Create a focused review session for the topic: {topic}.
+
+PARAMETERS:
+- Topic: {topic}
+- Difficulty: {difficulty}
+- Review Type: {review_type}
+
+CRITICAL REQUIREMENTS:
+1. Provide key concepts summary
+2. Include important formulas/rules (if applicable)
+3. Show worked examples
+4. Provide actionable study items (NOT practice questions)
+5. List common mistakes
+6. Start IMMEDIATELY with topic overview - NO preamble
+
+OUTPUT FORMAT:
+
+# Topic Review: {topic}
+
+## Topic Overview
+[Brief overview of the topic and its importance]
+
+## Key Concepts
+
+### Concept 1: [Concept Name]
+**Definition:** [Clear definition]
+**Key Points:**
+- [Point 1]
+- [Point 2]
+- [Point 3]
+
+### Concept 2: [Concept Name]
+[Same structure]
+
+## Important Formulas/Rules
+[If applicable, list key formulas or rules]
+
+**Formula 1:** [Formula]
+- **When to Use:** [Explanation]
+- **Example:** [Worked example]
+
+## Worked Examples
+
+### Example 1: [Example Type]
+**Problem:** [Problem statement]
+**Solution:**
+[Step-by-step solution]
+**Key Takeaway:** [What to learn from this example]
+
+### Example 2: [Example Type]
+[Same structure]
+
+## Actionable Study Items
+
+### Immediate Actions (Do This First)
+1. **Review:** [Specific concept or formula to review]
+2. **Practice:** [Specific type of problem to practice]
+3. **Memorize:** [Key formula or rule to memorize]
+
+### Study Tasks (This Week)
+1. **Focus Area:** [Specific topic to focus on]
+   - **Action:** [Concrete action item]
+   - **Resources:** [Recommended materials or methods]
+   - **Time:** [Suggested time allocation]
+
+2. **Focus Area:** [Another specific topic]
+   - **Action:** [Concrete action item]
+   - **Resources:** [Recommended materials or methods]
+   - **Time:** [Suggested time allocation]
+
+### Preparation Checklist
+- [ ] Master [specific concept]
+- [ ] Complete [specific practice type]
+- [ ] Review [specific examples]
+- [ ] Understand [specific application]
+
+## Common Mistakes to Avoid
+1. **Mistake 1:** [Description] - **How to Avoid:** [Solution]
+2. **Mistake 2:** [Description] - **How to Avoid:** [Solution]
+3. **Mistake 3:** [Description] - **How to Avoid:** [Solution]
+
+## Quick Reference
+- [Key point 1]
+- [Key point 2]
+- [Key point 3]
+
+## Recommended Study Sequence
+1. Start with: [First actionable item]
+2. Then focus on: [Second actionable item]
+3. Finally review: [Third actionable item]
+
+Generate the complete topic review now:"""
+    
+    review_content = gemini_client.generate_response(
+      system_prompt="You are a topic review expert. Create comprehensive, focused review sessions for exam preparation.",
+      messages=[{"role": "user", "content": review_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return review_content if review_content else f"# Topic Review: {topic}\n\n## Key Concepts\n[Key concepts for {topic}]\n\n## Important Points\n- [Point 1]\n- [Point 2]\n\n## Practice Questions\n[Practice questions for {topic}]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _generate_topic_review: {traceback.format_exc()}")
+    return f"Error generating topic review: {str(e)}. Please try again."
+
+
+def _track_progress(exam_type: str, practice_scores: str, target_score: int = None, exam_date: str = None) -> str:
+  """Track and visualize exam preparation progress over time.
+  
+  Args:
+    exam_type: Type of exam
+    practice_scores: List of practice exam scores over time (comma-separated or structured text)
+    target_score: Target score to achieve (optional)
+    exam_date: Exam date in YYYY-MM-DD format (optional)
+  
+  Returns:
+    Progress report with trends, readiness assessment, and recommendations.
+  """
+  try:
+    exam_type = str(exam_type) if exam_type else "General Exam"
+    practice_scores = str(practice_scores) if practice_scores else "No scores provided"
+    
+    target_score_str = f"{target_score}" if target_score else "Not specified"
+    exam_date_str = exam_date if exam_date else "Not specified"
+    
+    from app.services.gemini import GeminiClient
+    gemini_client = GeminiClient()
+    
+    progress_prompt = f"""Analyze exam preparation progress and provide a comprehensive progress report.
+
+PARAMETERS:
+- Exam Type: {exam_type}
+- Practice Scores: {practice_scores}
+- Target Score: {target_score_str}
+- Exam Date: {exam_date_str}
+
+CRITICAL REQUIREMENTS:
+1. Calculate score trends over time
+2. Assess improvement rate
+3. Calculate readiness percentage
+4. Identify milestones achieved
+5. Provide recommendations
+6. Start IMMEDIATELY with progress summary - NO preamble
+
+OUTPUT FORMAT:
+
+# Progress Report: {exam_type}
+
+## Progress Summary
+- **Current Score:** [Latest score]
+- **Target Score:** {target_score_str}
+- **Improvement:** [Improvement percentage/points]
+- **Readiness Level:** [Percentage]% ready
+- **Status:** [On Track/Needs Improvement/Excellent]
+
+## Score Trends
+
+### Score History
+- Practice 1: [Score] - [Date]
+- Practice 2: [Score] - [Date]
+- Practice 3: [Score] - [Date]
+- [Continue for all scores...]
+
+### Trend Analysis
+- **Overall Trend:** [Increasing/Decreasing/Stable]
+- **Average Score:** [Average]
+- **Best Score:** [Best score]
+- **Improvement Rate:** [Points per practice/test]
+
+## Readiness Assessment
+
+### Current Readiness: [X]%
+**Breakdown:**
+- Knowledge Mastery: [X]%
+- Test-Taking Skills: [X]%
+- Time Management: [X]%
+- Confidence Level: [X]%
+
+### Readiness Prediction
+Based on current progress, you are [X]% likely to achieve your target score.
+
+## Milestones Achieved
+- [✓] [Milestone 1]
+- [✓] [Milestone 2]
+- [ ] [Milestone 3] - [Progress]
+
+## Areas of Improvement
+1. [Area 1]: [Current status] → [Target]
+2. [Area 2]: [Current status] → [Target]
+
+## Recommendations
+
+### Immediate Actions
+- [Action 1]
+- [Action 2]
+
+### Study Focus
+- [Focus area 1]
+- [Focus area 2]
+
+### Practice Schedule
+- [Recommendation for practice frequency]
+
+## Motivation & Next Steps
+[Encouraging message and next steps]
+
+Generate the complete progress report now:"""
+    
+    progress_content = gemini_client.generate_response(
+      system_prompt="You are a progress tracking expert. Analyze exam preparation progress and provide actionable insights.",
+      messages=[{"role": "user", "content": progress_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.7
+    )
+    
+    return progress_content if progress_content else f"# Progress Report: {exam_type}\n\n## Progress Summary\n- Current Score: [To be calculated from practice scores]\n- Target Score: {target_score_str}\n- Readiness Level: [X]%\n\n## Score Trends\n[Score trend analysis will be generated]"
+    
+  except Exception as e:
+    import traceback
+    print(f"Error in _track_progress: {traceback.format_exc()}")
+    return f"Error tracking progress: {str(e)}. Please try again."
+
+
 def get_tools_for_agent_slug(slug: str) -> List[Tool]:
   """Return LangChain tools enabled for a given prebuilt agent slug."""
   tools: List[Tool] = []
@@ -1138,6 +1890,92 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
         name="build_study_plan",
         func=_build_study_plan,
         description="Create a daily/weekly micro-learning schedule with time slots and topics.",
+      )
+    )
+
+  elif slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+    tools.append(
+      Tool(
+        name="create_practice_exam",
+        func=_create_practice_exam,
+        description=(
+          "Create a full-length practice exam with various question types (MCQ, short answer, essay). "
+          "Includes time limits, answer key, and scoring rubric. "
+          "Args: exam_type (str: SAT/GRE/Certification/etc.), subject (str), num_questions (int, default=50), time_limit (int, minutes, default=60), difficulty (str: easy/medium/hard, default='medium')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="create_study_schedule",
+        func=_create_study_schedule,
+        description=(
+          "Create a personalized study schedule leading up to the exam date. "
+          "Includes daily goals, topic breakdown, practice exam dates, and milestones. "
+          "Args: exam_date (str: YYYY-MM-DD), subjects (str, comma-separated), hours_per_day (int, default=2), current_level (str: beginner/intermediate/advanced, default='intermediate')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="identify_weak_areas",
+        func=_identify_weak_areas,
+        description=(
+          "Analyze practice test results and identify areas needing improvement. "
+          "Provides ranked weak areas, specific topics to focus on, and improvement strategies. "
+          "Args: subject (str), practice_results (str: scores by topic/structured results), exam_type (str, optional)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="create_exam_strategies",
+        func=_create_exam_strategies,
+        description=(
+          "Provide comprehensive exam-taking strategies including time management, question prioritization, "
+          "answer elimination techniques, and stress management tips. "
+          "Args: exam_type (str), subject (str), question_format (str: MCQ/essay/mixed, default='mixed')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="generate_topic_review",
+        func=_generate_topic_review,
+        description=(
+          "Create a focused review session for a specific topic with key concepts, examples, practice questions, "
+          "and common mistakes. "
+          "Args: topic (str), difficulty (str: easy/medium/hard, default='medium'), review_type (str: concept/example/practice/comprehensive, default='comprehensive')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="track_progress",
+        func=_track_progress,
+        description=(
+          "Track and visualize exam preparation progress over time. "
+          "Provides score trends, readiness assessment, milestones, and recommendations. "
+          "Args: exam_type (str), practice_scores (str: list of scores over time), target_score (int, optional), exam_date (str: YYYY-MM-DD, optional)."
+        ),
+      )
+    )
+    # Include shared tools
+    tools.append(
+      Tool(
+        name="generate_quiz",
+        func=_generate_quiz,
+        description=(
+          "Generate quick practice quizzes for specific topics. "
+          "Args: topic (str), difficulty (str: easy/medium/hard, default='medium'), num_questions (int, default=5)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="build_study_plan",
+        func=_build_study_plan,
+        description="Create a high-level study plan outline for exam preparation goals.",
       )
     )
 

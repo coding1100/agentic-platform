@@ -49,7 +49,7 @@
             </div>
               <p class="docs-note">
                 Replace <code>{agent_slug}</code> with your agent's slug. 
-                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>
               </p>
 
             <h3>Authentication</h3>
@@ -451,6 +451,100 @@
             </div>
           </section>
 
+          <!-- Exam Prep Agent Section -->
+          <section id="exam-prep" class="docs-section-main">
+            <h2>Exam Prep Agent Integration</h2>
+            <p class="section-description">
+              <strong>Agent Slug:</strong> <code>education.exam_prep_agent</code><br>
+              A personal tutor that helps you prepare for exams with practice tests, study schedules, 
+              progress tracking, and exam strategies. Perfect for standardized tests, certification exams, 
+              and academic exams.
+            </p>
+
+            <h3>Typical Workflow</h3>
+            <ol class="flow-list">
+              <li><strong>Discovery Phase:</strong> Agent understands exam type, date, subject, and user's current level</li>
+              <li><strong>Baseline Assessment:</strong> Agent assesses current knowledge through diagnostic questions</li>
+              <li><strong>Study Plan Creation:</strong> Agent creates personalized study schedule leading up to exam date</li>
+              <li><strong>Practice Exam Generation:</strong> Agent generates full-length practice exams for regular practice</li>
+              <li><strong>Progress Analysis:</strong> Agent tracks progress and identifies weak areas after each practice</li>
+              <li><strong>Targeted Review:</strong> Agent provides focused review sessions for weak areas</li>
+              <li><strong>Strategy Guidance:</strong> Agent provides exam-taking strategies and time management tips</li>
+              <li><strong>Readiness Assessment:</strong> Agent predicts exam readiness based on practice performance</li>
+            </ol>
+
+            <h3>Endpoint</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.exam_prep_agent/chat</code>
+            </div>
+
+            <h3>Request Format</h3>
+            <h4>Headers</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+              <button 
+                @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)" 
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h4>Request Body</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "optional-uuid-or-null",
+  "message": "I'm preparing for the SAT Math exam on 2024-06-15"
+}, null, 2) }}</pre>
+              <button 
+                @click="copyToClipboard(JSON.stringify({
+  conversation_id: null,
+  message: 'I\'m preparing for the SAT Math exam on 2024-06-15'
+}, null, 2), false)" 
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h3>Example: Starting Exam Preparation</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ getExamPrepExample() }}</pre>
+              <button @click="copyToClipboard(getExamPrepExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> The agent maintains conversation context throughout your exam preparation journey. 
+              After creating a study schedule, you can ask for practice exams, track your progress, and get targeted 
+              reviews without repeating information. The agent adapts to different exam types (SAT, GRE, certifications, etc.).
+            </p>
+
+            <h3>Response Format</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "Agent's response with study schedule, practice exam, or progress analysis",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+            </div>
+
+            <h3>Key Features</h3>
+            <ul class="docs-notes">
+              <li><strong>Practice Exams:</strong> Full-length exams with time limits, answer keys, and scoring rubrics</li>
+              <li><strong>Study Schedules:</strong> Personalized daily/weekly plans based on exam date and available time</li>
+              <li><strong>Progress Tracking:</strong> Monitor improvement over time with readiness assessment</li>
+              <li><strong>Weak Area Analysis:</strong> Identify topics needing more focus based on practice results</li>
+              <li><strong>Exam Strategies:</strong> Time management, question prioritization, and test-taking tips</li>
+              <li><strong>Topic Reviews:</strong> Focused review sessions for specific topics with examples and practice</li>
+            </ul>
+          </section>
+
           <!-- Quick Start Section -->
           <section id="quick-start" class="docs-section-main">
             <h2>Quick Start Guide</h2>
@@ -595,6 +689,7 @@ const tabs = [
   { id: 'course-creation', label: 'Course Creation', icon: '📚' },
   { id: 'language-practice', label: 'Language Practice', icon: '🌐' },
   { id: 'micro-learning', label: 'Micro-Learning', icon: '📖' },
+  { id: 'exam-prep', label: 'Exam Prep', icon: '📝' },
   { id: 'quick-start', label: 'Quick Start', icon: '🚀' },
   { id: 'code-examples', label: 'Code Examples', icon: '💻' },
   { id: 'errors', label: 'Error Codes', icon: '⚠️' }
@@ -806,6 +901,29 @@ Body: {
 // 4. Track progress and streaks
 // 5. Schedule spaced repetition reviews
 // Maintain conversation_id throughout to build learning path`
+}
+
+function getExamPrepExample(): string {
+  return `// Start exam preparation journey
+POST ${baseUrl.value}/api/v1/public/agents/education.exam_prep_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "I'm preparing for the SAT Math exam on 2024-06-15. I can study 2 hours per day."
+}
+
+// Agent will guide through:
+// 1. Understanding exam requirements
+// 2. Creating personalized study schedule
+// 3. Generating practice exams
+// 4. Tracking progress over time
+// 5. Identifying weak areas
+// 6. Providing targeted reviews
+// 7. Sharing exam-taking strategies
+// Maintain conversation_id throughout to preserve progress and context`
 }
 
 function getQuickStartExample(): string {

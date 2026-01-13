@@ -123,15 +123,197 @@ class LangchainAgentService:
     Simplified LangChain agent - uses simple chain for all agents.
     Merges history properly to avoid consecutive same-role messages.
     
-    For quiz requests, intercepts and generates quiz directly in a single call.
+    For quiz/exam requests, intercepts and generates directly in a single call.
     """
-    # Check if this is a quiz request - intercept and generate directly
+    # Check if this is a quiz/exam request - intercept and generate directly
     latest_lower = latest_input.lower() if latest_input else ""
     is_quiz_request = (
       "quiz" in latest_lower or 
       "generate" in latest_lower and ("question" in latest_lower or "mcq" in latest_lower) or
       "multiple choice" in latest_lower
     )
+    
+    is_exam_request = (
+      "practice exam" in latest_lower or
+      "create_practice_exam" in latest_lower or
+      ("generate" in latest_lower and "exam" in latest_lower and "practice" in latest_lower)
+    )
+    
+    # If it's an exam request for exam prep agent, generate directly
+    if is_exam_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _create_practice_exam
+      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+        # Extract exam parameters from the request - handle multiple formats
+        import re
+        
+        # Try to extract from structured format first (exam_type: "value")
+        exam_type_match = re.search(r'exam_type[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        if not exam_type_match:
+          # Try to extract from natural language (e.g., "for SAT exam", "for GRE")
+          exam_type_match = re.search(r'(?:for|in)\s+([A-Z][A-Z\s]+?)(?:\s+exam|\s+in|$)', latest_input, re.IGNORECASE)
+        exam_type = exam_type_match.group(1).strip().strip('"') if exam_type_match else "General Exam"
+        
+        # Try to extract subject
+        subject_match = re.search(r'subject[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        if not subject_match:
+          # Try to extract from natural language (e.g., "in Mathematics", "in Math")
+          subject_match = re.search(r'(?:in|for)\s+([A-Z][a-z\s]+?)(?:\s+on|\s+with|\s+exam|$)', latest_input, re.IGNORECASE)
+        subject = subject_match.group(1).strip().strip('"') if subject_match else "General Knowledge"
+        
+        # Extract num_questions
+        num_questions_match = re.search(r'num_questions[:\s]+(\d+)', latest_input, re.IGNORECASE)
+        if not num_questions_match:
+          num_questions_match = re.search(r'(\d+)\s*(?:questions?|questions)', latest_input, re.IGNORECASE)
+        num_questions = int(num_questions_match.group(1)) if num_questions_match else 20
+        
+        # Extract time_limit
+        time_limit_match = re.search(r'time_limit[:\s]+(\d+)', latest_input, re.IGNORECASE)
+        if not time_limit_match:
+          time_limit_match = re.search(r'(\d+)\s*(?:minutes?|mins?)', latest_input, re.IGNORECASE)
+        time_limit = int(time_limit_match.group(1)) if time_limit_match else 60
+        
+        # Extract difficulty
+        difficulty_match = re.search(r'difficulty[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        if not difficulty_match:
+          difficulty_match = re.search(r'(easy|medium|hard|beginner|intermediate|advanced)', latest_input, re.IGNORECASE)
+        difficulty = difficulty_match.group(1).strip().lower().strip('"') if difficulty_match else "medium"
+        if difficulty in ["beginner"]:
+          difficulty = "easy"
+        elif difficulty in ["intermediate"]:
+          difficulty = "medium"
+        elif difficulty in ["advanced"]:
+          difficulty = "hard"
+        
+        # Generate exam directly using the tool (single API call)
+        try:
+          print(f"🎯 Intercepting exam request: exam_type={exam_type}, subject={subject}, num_questions={num_questions}, difficulty={difficulty}")
+          exam_output = _create_practice_exam(
+            exam_type=exam_type,
+            subject=subject,
+            num_questions=num_questions,
+            time_limit=time_limit,
+            difficulty=difficulty
+          )
+          print(f"✅ Exam generated successfully, length: {len(exam_output)} chars")
+          print(f"📝 Exam preview: {exam_output[:300]}...")
+          return exam_output
+        except Exception as e:
+          import traceback
+          print(f"❌ Exam generation tool failed: {traceback.format_exc()}")
+          # Fallback to normal generation if tool fails
+          print(f"Exam generation tool failed, falling back to normal generation: {str(e)}")
+    
+    # Check for schedule, weak areas, and topic review requests - intercept and generate directly
+    is_schedule_request = (
+      "create_study_schedule" in latest_lower or
+      ("study" in latest_lower and "schedule" in latest_lower)
+    )
+    
+    is_weak_areas_request = (
+      "identify_weak_areas" in latest_lower or
+      ("weak" in latest_lower and "area" in latest_lower and "analysis" in latest_lower)
+    )
+    
+    is_topic_review_request = (
+      "generate_topic_review" in latest_lower or
+      ("topic" in latest_lower and "review" in latest_lower)
+    )
+    
+    # If it's a schedule request for exam prep agent, generate directly
+    if is_schedule_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _create_study_schedule
+      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+        import re
+        # Extract parameters
+        exam_date_match = re.search(r'exam_date[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        exam_date = exam_date_match.group(1).strip().strip('"') if exam_date_match else None
+        
+        subjects_match = re.search(r'subjects[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        subjects = subjects_match.group(1).strip().strip('"') if subjects_match else "General"
+        
+        hours_match = re.search(r'hours_per_day[:\s]+(\d+)', latest_input, re.IGNORECASE)
+        hours_per_day = int(hours_match.group(1)) if hours_match else 2
+        
+        level_match = re.search(r'current_level[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        current_level = level_match.group(1).strip().strip('"') if level_match else "intermediate"
+        
+        if exam_date:
+          try:
+            print(f"🎯 Intercepting schedule request: exam_date={exam_date}, subjects={subjects}, hours_per_day={hours_per_day}, current_level={current_level}")
+            schedule_output = _create_study_schedule(
+              exam_date=exam_date,
+              subjects=subjects,
+              hours_per_day=hours_per_day,
+              current_level=current_level
+            )
+            print(f"✅ Schedule generated successfully, length: {len(schedule_output)} chars")
+            return schedule_output
+          except Exception as e:
+            import traceback
+            print(f"❌ Schedule generation tool failed: {traceback.format_exc()}")
+    
+    # If it's a weak areas request for exam prep agent, generate directly
+    if is_weak_areas_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _identify_weak_areas
+      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+        import re
+        # Extract parameters
+        subject_match = re.search(r'subject[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        subject = subject_match.group(1).strip().strip('"') if subject_match else "General"
+        
+        # Extract practice_results - handle multi-line content
+        practice_results_match = re.search(r'practice_results[:\s]+"([^"]+)"', latest_input, re.IGNORECASE | re.DOTALL)
+        if not practice_results_match:
+          # Try without quotes - capture until next parameter or end
+          practice_results_match = re.search(r'practice_results[:\s]+(.+?)(?=\n- [a-z_]+:|$)', latest_input, re.IGNORECASE | re.DOTALL)
+        if not practice_results_match:
+          # Try to find any practice results text in the message
+          practice_results_match = re.search(r'practice_results[:\s]+(.+)', latest_input, re.IGNORECASE | re.DOTALL)
+        practice_results = practice_results_match.group(1).strip().strip('"') if practice_results_match else "No results provided"
+        
+        exam_type_match = re.search(r'exam_type[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        exam_type = exam_type_match.group(1).strip().strip('"') if exam_type_match else "general"
+        
+        try:
+          print(f"🎯 Intercepting weak areas request: subject={subject}, exam_type={exam_type}")
+          weak_areas_output = _identify_weak_areas(
+            subject=subject,
+            practice_results=practice_results,
+            exam_type=exam_type
+          )
+          print(f"✅ Weak areas analysis generated successfully, length: {len(weak_areas_output)} chars")
+          return weak_areas_output
+        except Exception as e:
+          import traceback
+          print(f"❌ Weak areas analysis tool failed: {traceback.format_exc()}")
+    
+    # If it's a topic review request for exam prep agent, generate directly
+    if is_topic_review_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _generate_topic_review
+      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+        import re
+        # Extract parameters
+        topic_match = re.search(r'topic[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        topic = topic_match.group(1).strip().strip('"') if topic_match else "General Topic"
+        
+        difficulty_match = re.search(r'difficulty[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        difficulty = difficulty_match.group(1).strip().strip('"') if difficulty_match else "medium"
+        
+        review_type_match = re.search(r'review_type[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        review_type = review_type_match.group(1).strip().strip('"') if review_type_match else "comprehensive"
+        
+        try:
+          print(f"🎯 Intercepting topic review request: topic={topic}, difficulty={difficulty}, review_type={review_type}")
+          topic_review_output = _generate_topic_review(
+            topic=topic,
+            difficulty=difficulty,
+            review_type=review_type
+          )
+          print(f"✅ Topic review generated successfully, length: {len(topic_review_output)} chars")
+          return topic_review_output
+        except Exception as e:
+          import traceback
+          print(f"❌ Topic review tool failed: {traceback.format_exc()}")
     
     # If it's a quiz request for prebuilt agents, generate directly
     if is_quiz_request and agent.is_prebuilt:
