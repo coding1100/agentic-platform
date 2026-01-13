@@ -106,7 +106,7 @@ async def delete_agent(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete an agent (only if owned by current user)."""
+    """Delete an agent (only if owned by current user and not pre-built)."""
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
         Agent.user_id == current_user.id
@@ -116,6 +116,13 @@ async def delete_agent(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found"
+        )
+    
+    # Prevent deleting pre-built agents
+    if agent.is_prebuilt:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Pre-built agents cannot be deleted"
         )
     
     db.delete(agent)

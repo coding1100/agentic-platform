@@ -104,6 +104,14 @@ onMounted(async () => {
     isEdit.value = true
     const result = await agentsStore.fetchAgent(agentId)
     if (result.success && result.agent) {
+      // Prevent editing pre-built agents
+      if (result.agent.is_prebuilt) {
+        error.value = 'Pre-built agents cannot be edited'
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 2000)
+        return
+      }
       form.value = {
         name: result.agent.name,
         description: result.agent.description || '',

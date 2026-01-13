@@ -27,7 +27,7 @@
         >
           <div class="agent-header">
             <h3>{{ agent.name }}</h3>
-            <div class="agent-actions">
+            <div class="agent-actions" v-if="!agent.is_prebuilt">
               <button
                 @click.stop="editAgent(agent.id)"
                 class="btn-icon"

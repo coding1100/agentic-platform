@@ -47,10 +47,10 @@
                 📋
               </button>
             </div>
-            <p class="docs-note">
-              Replace <code>{agent_slug}</code> with your agent's slug. 
-              Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>
-            </p>
+              <p class="docs-note">
+                Replace <code>{agent_slug}</code> with your agent's slug. 
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>
+              </p>
 
             <h3>Authentication</h3>
             <p class="section-description">
@@ -368,6 +368,89 @@
             </div>
           </section>
 
+          <!-- Micro-Learning Agent Section -->
+          <section id="micro-learning" class="docs-section-main">
+            <h2>Micro-Learning Agent Integration</h2>
+            <p class="section-description">
+              <strong>Agent Slug:</strong> <code>education.micro_learning_agent</code><br>
+              A personal tutor that delivers daily bite-sized lessons for busy learners with interactive exercises, 
+              spaced repetition, and progress tracking.
+            </p>
+
+            <h3>Typical Workflow</h3>
+            <ol class="flow-list">
+              <li><strong>Onboarding:</strong> Agent understands learning goals, available time, and preferred topics</li>
+              <li><strong>Daily Lesson:</strong> Agent generates focused lesson based on time availability (5/10/15 minutes)</li>
+              <li><strong>Interactive Delivery:</strong> Agent presents lesson with examples, visual aids, and interactive elements</li>
+              <li><strong>Quick Practice:</strong> Agent offers 2-3 question micro-quiz or interactive exercise</li>
+              <li><strong>Immediate Feedback:</strong> Agent provides instant feedback and explanations</li>
+              <li><strong>Progress Tracking:</strong> Agent updates streak, completion status, and learning history</li>
+              <li><strong>Spaced Repetition:</strong> Agent schedules reviews at optimal intervals for retention</li>
+              <li><strong>Learning Paths:</strong> Agent creates sequential micro-lessons that build on each other</li>
+            </ol>
+
+            <h3>Endpoint</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.micro_learning_agent/chat</code>
+            </div>
+
+            <h3>Request Format</h3>
+            <h4>Headers</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+              <button 
+                @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)" 
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h4>Request Body</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "optional-uuid-or-null",
+  "message": "I want to learn Python basics in 10 minutes"
+}, null, 2) }}</pre>
+              <button 
+                @click="copyToClipboard(JSON.stringify({
+  conversation_id: null,
+  message: 'I want to learn Python basics in 10 minutes'
+}, null, 2), false)" 
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h3>Example: Starting Micro-Learning</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ getMicroLearningExample() }}</pre>
+              <button @click="copyToClipboard(getMicroLearningExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> The agent adapts lesson depth based on available time. Specify "5 minutes", "10 minutes", 
+              or "15 minutes" to get appropriately sized lessons. The agent maintains conversation context to build sequential 
+              learning paths.
+            </p>
+
+            <h3>Response Format</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "Agent's response with micro-lesson content",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+            </div>
+          </section>
+
           <!-- Quick Start Section -->
           <section id="quick-start" class="docs-section-main">
             <h2>Quick Start Guide</h2>
@@ -511,6 +594,7 @@ const tabs = [
   { id: 'personal-tutor', label: 'Personal Tutor', icon: '👨‍🏫' },
   { id: 'course-creation', label: 'Course Creation', icon: '📚' },
   { id: 'language-practice', label: 'Language Practice', icon: '🌐' },
+  { id: 'micro-learning', label: 'Micro-Learning', icon: '📖' },
   { id: 'quick-start', label: 'Quick Start', icon: '🚀' },
   { id: 'code-examples', label: 'Code Examples', icon: '💻' },
   { id: 'errors', label: 'Error Codes', icon: '⚠️' }
@@ -701,6 +785,27 @@ Body: {
 // 4. Grammar practice
 // 5. Conversation scenarios
 // Maintain conversation_id throughout to preserve progress`
+}
+
+function getMicroLearningExample(): string {
+  return `// Start micro-learning session
+POST ${baseUrl.value}/api/v1/public/agents/education.micro_learning_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "I want to learn Python basics in 10 minutes"
+}
+
+// Agent will:
+// 1. Generate focused 10-minute lesson
+// 2. Provide interactive exercises
+// 3. Offer quick micro-quiz (2-3 questions)
+// 4. Track progress and streaks
+// 5. Schedule spaced repetition reviews
+// Maintain conversation_id throughout to build learning path`
 }
 
 function getQuickStartExample(): string {
