@@ -29,7 +29,11 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new API key. If agent_id is null, creates a universal key for all agents."""
+    """Create a new API key. If agent_id is null, creates a universal key for all agents.
+
+    New keys embed their database ID in the plain key to allow O(1) lookup while
+    keeping the stored value hashed.
+    """
     agent = None
     agent_slug = None
     
@@ -51,21 +55,27 @@ async def create_api_key(
             )
         agent_slug = agent.slug
     
-    # Generate new API key
-    plain_key = generate_api_key()
-    key_hash = hash_api_key(plain_key)
+    # Create API key record with temporary hash; the final key will embed the DB ID.
+    temp_plain = generate_api_key()
+    temp_hash = hash_api_key(temp_plain)
     
-    # Create API key record
     api_key = ApiKey(
         user_id=current_user.id,
         agent_id=api_key_data.agent_id,  # Can be None for universal keys
-        key_hash=key_hash,
+        key_hash=temp_hash,
         name=api_key_data.name,
         expires_at=api_key_data.expires_at,
         rate_limit_per_minute=api_key_data.rate_limit_per_minute,
         allowed_origins=api_key_data.allowed_origins,  # Can be None for allow all
     )
     db.add(api_key)
+    db.commit()
+    db.refresh(api_key)
+
+    # Now that we have the DB ID, generate the final plain key and hash.
+    # Format: ak_<uuidhex>_<random>
+    final_plain = f"ak_{api_key.id.hex}_{generate_api_key()}"
+    api_key.key_hash = hash_api_key(final_plain)
     db.commit()
     db.refresh(api_key)
     
@@ -81,7 +91,7 @@ async def create_api_key(
         rate_limit_per_minute=api_key.rate_limit_per_minute,
         total_requests=api_key.total_requests,
         allowed_origins=api_key.allowed_origins,
-        key=plain_key,  # Include plain key only on creation
+        key=final_plain,  # Include plain key only on creation
         agent_slug=agent_slug  # Include agent slug for URL generation (null for universal keys)
     )
     

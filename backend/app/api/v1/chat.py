@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.core.database import get_db
@@ -24,13 +25,15 @@ async def chat(
 ):
     """Send a message to an agent and get a response."""
     # Verify agent ownership or prebuilt access
-    agent = db.query(Agent).filter(
-        Agent.id == agent_id,
-        (
-            (Agent.user_id == current_user.id)
-            | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
-        ),
-    ).first()
+    agent = await run_in_threadpool(
+        lambda: db.query(Agent).filter(
+            Agent.id == agent_id,
+            (
+                (Agent.user_id == current_user.id)
+                | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
+            ),
+        ).first()
+    )
     
     if not agent:
         raise HTTPException(
@@ -41,11 +44,13 @@ async def chat(
     # Get or create conversation
     conversation = None
     if chat_request.conversation_id:
-        conversation = db.query(Conversation).filter(
-            Conversation.id == chat_request.conversation_id,
-            Conversation.user_id == current_user.id,
-            Conversation.agent_id == agent_id
-        ).first()
+        conversation = await run_in_threadpool(
+            lambda: db.query(Conversation).filter(
+                Conversation.id == chat_request.conversation_id,
+                Conversation.user_id == current_user.id,
+                Conversation.agent_id == agent_id
+            ).first()
+        )
         
         if not conversation:
             raise HTTPException(
@@ -54,45 +59,58 @@ async def chat(
             )
     else:
         # Create new conversation
-        conversation = Conversation(
-            agent_id=agent_id,
-            user_id=current_user.id,
-            title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
-        )
-        db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
+        def _create_conversation():
+            conv = Conversation(
+                agent_id=agent_id,
+                user_id=current_user.id,
+                title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
+            )
+            db.add(conv)
+            db.commit()
+            db.refresh(conv)
+            return conv
+
+        conversation = await run_in_threadpool(_create_conversation)
         
         # If agent has a greeting message, add it to the conversation
         if agent.greeting_message:
-            greeting_message = Message(
-                conversation_id=conversation.id,
-                role=MessageRole.ASSISTANT,
-                content=agent.greeting_message,
-            )
-            db.add(greeting_message)
-            db.commit()
+            def _add_greeting():
+                greeting_message = Message(
+                    conversation_id=conversation.id,
+                    role=MessageRole.ASSISTANT,
+                    content=agent.greeting_message,
+                )
+                db.add(greeting_message)
+                db.commit()
+
+            await run_in_threadpool(_add_greeting)
     
     # Get recent message history BEFORE saving current message (last 10 messages for context and performance)
-    recent_messages = (
-        db.query(Message)
-        .filter(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    def _load_recent_messages():
+        return (
+            db.query(Message)
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.desc())
+            .limit(10)
+            .all()
+        )
+
+    recent_messages = await run_in_threadpool(_load_recent_messages)
 
     # Reverse to get chronological order
     recent_messages.reverse()
 
     # Save user message AFTER getting history
-    user_message = Message(
-        conversation_id=conversation.id,
-        role=MessageRole.USER,
-        content=chat_request.message,
-    )
-    db.add(user_message)
-    db.commit()
+    def _save_user_message():
+        user_message = Message(
+            conversation_id=conversation.id,
+            role=MessageRole.USER,
+            content=chat_request.message,
+        )
+        db.add(user_message)
+        db.commit()
+
+    await run_in_threadpool(_save_user_message)
 
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -126,19 +144,25 @@ async def chat(
         )
 
     # Save assistant message
-    assistant_message = Message(
-        conversation_id=conversation.id,
-        role=MessageRole.ASSISTANT,
-        content=assistant_response,
-    )
-    db.add(assistant_message)
-    db.commit()
+    def _save_assistant_message():
+        assistant_message = Message(
+            conversation_id=conversation.id,
+            role=MessageRole.ASSISTANT,
+            content=assistant_response,
+        )
+        db.add(assistant_message)
+        db.commit()
+
+    await run_in_threadpool(_save_assistant_message)
 
     # Update conversation updated_at
     from datetime import datetime
 
-    conversation.updated_at = datetime.utcnow()
-    db.commit()
+    def _update_conversation_timestamp():
+        conversation.updated_at = datetime.utcnow()
+        db.commit()
+
+    await run_in_threadpool(_update_conversation_timestamp)
 
     return ChatResponse(
         conversation_id=conversation.id,

@@ -349,6 +349,115 @@ class LangchainAgentService:
           # Fallback to normal generation if tool fails
           print(f"Quiz generation tool failed, falling back to normal generation: {str(e)}")
     
+    # Tool-wired flow for Course Creation Agent: intercept common intents and delegate
+    # directly to the prebuilt tools for fast, deterministic behavior.
+    from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
+    if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS["course_creation_agent"]:
+      import re
+      from app.tools.prebuilt_agents import (
+        _create_course_structure,
+        _create_learning_assessment,
+        _create_concept_map,
+        _create_workflow_automation,
+        _create_meeting_notes_template,
+        _validate_course_content,
+      )
+
+      text = latest_lower
+
+      # 1) Course structure / outline
+      if ("course structure" in text or "course outline" in text or "create_course_structure" in text):
+        # Try to extract course title, objectives, and duration
+        title_match = re.search(r'(?:course\s+title|for\s+course|about)\s*[:\-"]?\s*([^"\n,]+)', latest_input, re.IGNORECASE)
+        course_title = title_match.group(1).strip() if title_match else latest_input[:80]
+
+        objectives_match = re.search(r'(?:learning objectives?|objectives?)\s*[:\-]\s*(.+)', latest_input, re.IGNORECASE)
+        if objectives_match:
+          learning_objectives = objectives_match.group(1).strip()
+        else:
+          learning_objectives = course_title
+
+        weeks_match = re.search(r'(?:duration|weeks?)\s*[:\-]?\s*(\d+)', latest_input, re.IGNORECASE)
+        duration_weeks = int(weeks_match.group(1)) if weeks_match else 8
+
+        return _create_course_structure(
+          course_title=course_title,
+          learning_objectives=learning_objectives,
+          duration_weeks=duration_weeks,
+        )
+
+      # 2) Learning assessment
+      if ("learning assessment" in text or "assessment" in text or "create_learning_assessment" in text):
+        topic_match = re.search(r'(?:topic|for)\s*[:\-"]?\s*([^"\n,]+)', latest_input, re.IGNORECASE)
+        topic = topic_match.group(1).strip() if topic_match else "General Topic"
+
+        assessment_type_match = re.search(r'(diagnostic|formative|summative|comprehensive)', latest_input, re.IGNORECASE)
+        assessment_type = assessment_type_match.group(1).lower() if assessment_type_match else "comprehensive"
+
+        num_q_match = re.search(r'(\d+)\s*(?:questions?|items?)', latest_input, re.IGNORECASE)
+        num_questions = int(num_q_match.group(1)) if num_q_match else 10
+
+        return _create_learning_assessment(
+          topic=topic,
+          assessment_type=assessment_type,
+          num_questions=num_questions,
+        )
+
+      # 3) Concept map
+      if ("concept map" in text or "concept mapping" in text or "create_concept_map" in text):
+        main_match = re.search(r'(?:main concept|for)\s*[:\-"]?\s*([^"\n,]+)', latest_input, re.IGNORECASE)
+        main_concept = main_match.group(1).strip() if main_match else "Main Concept"
+
+        related_match = re.search(r'(?:related concepts?|subtopics?)\s*[:\-]\s*(.+)', latest_input, re.IGNORECASE)
+        related_concepts = related_match.group(1).strip() if related_match else ""
+
+        return _create_concept_map(
+          main_concept=main_concept,
+          related_concepts=related_concepts,
+        )
+
+      # 4) Workflow automation
+      if ("workflow" in text or "automation" in text or "create_workflow_automation" in text):
+        wf_name_match = re.search(r'(?:workflow name|for workflow|workflow)\s*[:\-"]?\s*([^"\n,]+)', latest_input, re.IGNORECASE)
+        workflow_name = wf_name_match.group(1).strip() if wf_name_match else "Course Creation Workflow"
+
+        steps_match = re.search(r'(?:steps?)\s*[:\-]\s*(.+)', latest_input, re.IGNORECASE)
+        steps = steps_match.group(1).strip() if steps_match else "Plan course,Design modules,Create lessons,Publish course"
+
+        wf_type_match = re.search(r'(learning|assessment|content_creation|course_delivery)', latest_input, re.IGNORECASE)
+        automation_type = wf_type_match.group(1).lower() if wf_type_match else "learning"
+
+        return _create_workflow_automation(
+          workflow_name=workflow_name,
+          steps=steps,
+          automation_type=automation_type,
+        )
+
+      # 5) Meeting notes templates
+      if ("meeting notes" in text or "notes template" in text or "create_meeting_notes_template" in text):
+        mt_type_match = re.search(r'(course_planning|review|assessment_design)', latest_input, re.IGNORECASE)
+        meeting_type = mt_type_match.group(1).lower() if mt_type_match else "course_planning"
+
+        participants_match = re.search(r'(?:participants?)\s*[:\-]\s*(.+)', latest_input, re.IGNORECASE)
+        participants = participants_match.group(1).strip() if participants_match else ""
+
+        return _create_meeting_notes_template(
+          meeting_type=meeting_type,
+          participants=participants,
+        )
+
+      # 6) Course validation
+      if ("validate course" in text or "course validation" in text or "validate_course_content" in text):
+        structure_match = re.search(r'(?:course structure|outline|description)\s*[:\-]\s*(.+)', latest_input, re.IGNORECASE | re.DOTALL)
+        course_structure = structure_match.group(1).strip() if structure_match else latest_input
+
+        criteria_match = re.search(r'(comprehensive|accessibility|learning_objectives|assessment_alignment)', latest_input, re.IGNORECASE)
+        validation_criteria = criteria_match.group(1).lower() if criteria_match else "comprehensive"
+
+        return _validate_course_content(
+          course_structure=course_structure,
+          validation_criteria=validation_criteria,
+        )
     # Build messages with latest_input merged properly
     chat_history = self._history_to_messages(history, latest_input)
     
@@ -510,53 +619,39 @@ class LangchainAgentService:
     history: List[Message],
     latest_input: str,
   ):
-    """Generate streaming response - simplified version."""
+    """Generate streaming response - optimized to avoid extra chain overhead."""
     chat_history = self._history_to_messages(history, latest_input)
-    chain = self._build_chain(agent)
-    
+
+    # Build simple text prompt from history and latest input, similar to the
+    # non-streaming fallback path, to minimize LangChain pipeline overhead.
     try:
       if chat_history and isinstance(chat_history[-1], HumanMessage):
         current_input = chat_history[-1].content
-        history_for_chain = chat_history[:-1]
+        history_for_prompt = chat_history[:-1]
       else:
         current_input = latest_input
-        history_for_chain = chat_history
-      
-      async for chunk in chain.astream({
-        "input": current_input,
-        "chat_history": history_for_chain,
-      }):
-        content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+        history_for_prompt = chat_history
+
+      llm = self._build_llm(agent)
+
+      prompt_parts = []
+      for msg in history_for_prompt:
+        if isinstance(msg, HumanMessage):
+          prompt_parts.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+          prompt_parts.append(f"Assistant: {msg.content}")
+
+      prompt_parts.append(f"User: {current_input}")
+      prompt_parts.append("Assistant:")
+
+      full_prompt = "\n".join(prompt_parts)
+      if agent.system_prompt:
+        full_prompt = f"{agent.system_prompt}\n\n{full_prompt}"
+
+      async for chunk in llm.astream(full_prompt):
+        content = chunk.content if hasattr(chunk, "content") else str(chunk)
         if content:
           yield content
-    except AttributeError as e:
-      # Handle finish_reason AttributeError (unrecognized enum value from Gemini)
-      if "'int' object has no attribute 'name'" in str(e) or "finish_reason" in str(e).lower():
-        print(f"Warning: Unrecognized finish_reason in streaming, attempting fallback...")
-        # Fallback: use LLM directly for streaming
-        try:
-          llm = self._build_llm(agent)
-          # Build a simple prompt from history and current input
-          prompt_parts = []
-          for msg in history_for_chain:
-            if isinstance(msg, HumanMessage):
-              prompt_parts.append(f"User: {msg.content}")
-            elif isinstance(msg, AIMessage):
-              prompt_parts.append(f"Assistant: {msg.content}")
-          
-          prompt_parts.append(f"User: {current_input}")
-          prompt_parts.append("Assistant:")
-          
-          full_prompt = "\n".join(prompt_parts)
-          if agent.system_prompt:
-            full_prompt = f"{agent.system_prompt}\n\n{full_prompt}"
-          
-          # Stream from LLM directly
-          async for chunk in llm.astream(full_prompt):
-            content = chunk.content if hasattr(chunk, 'content') else str(chunk)
-            if content:
-              yield content
-        except Exception as fallback_error:
-          yield f"Error: Failed to generate response due to finish_reason issue. Please try again."
     except Exception as e:
+      # Surface a concise error message to the streaming client.
       yield f"Error: {str(e)}"

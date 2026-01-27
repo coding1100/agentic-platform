@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 import pyttsx3
-import io
 import tempfile
 import os
+from threading import Lock
 
 router = APIRouter()
 
@@ -15,6 +16,43 @@ class TTSRequest(BaseModel):
     volume: float = 0.9  # Volume (0.0 to 1.0)
 
 
+# Initialize a single shared TTS engine to avoid per-request startup cost.
+_tts_engine = pyttsx3.init()
+_tts_lock = Lock()
+
+
+def _synthesize_speech_to_bytes(text: str, rate: int, volume: float) -> bytes:
+    """Blocking TTS synthesis executed in a threadpool to avoid blocking the event loop."""
+    with _tts_lock:
+        engine = _tts_engine
+        engine.setProperty("rate", rate)
+        engine.setProperty("volume", volume)
+
+        voices = engine.getProperty("voices")
+        if voices:
+            selected_voice = voices[0]
+            for voice in voices:
+                if "female" in voice.name.lower() or "zira" in voice.name.lower():
+                    selected_voice = voice
+                    break
+            engine.setProperty("voice", selected_voice.id)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            tmp_path = tmp_file.name
+
+        engine.save_to_file(text, tmp_path)
+        engine.runAndWait()
+
+    if not os.path.exists(tmp_path):
+        raise Exception("Failed to generate audio file")
+
+    try:
+        with open(tmp_path, "rb") as audio_file:
+            return audio_file.read()
+    finally:
+        os.unlink(tmp_path)
+
+
 @router.post("/speak")
 async def text_to_speech(request: TTSRequest):
     """
@@ -22,57 +60,20 @@ async def text_to_speech(request: TTSRequest):
     Returns audio file as response.
     """
     try:
-        # Initialize TTS engine
-        engine = pyttsx3.init()
-        
-        # Set properties
-        engine.setProperty('rate', request.rate)
-        engine.setProperty('volume', request.volume)
-        
-        # Try to set a better voice (if available)
-        voices = engine.getProperty('voices')
-        if voices:
-            # Prefer female voice if available, otherwise use first available
-            for voice in voices:
-                if 'female' in voice.name.lower() or 'zira' in voice.name.lower():
-                    engine.setProperty('voice', voice.id)
-                    break
-            else:
-                engine.setProperty('voice', voices[0].id)
-        
-        # Save to temporary file (pyttsx3 saves as WAV on most systems)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-            tmp_path = tmp_file.name
-        
-        # Generate speech and save to file
-        engine.save_to_file(request.text, tmp_path)
-        engine.runAndWait()
-        
-        # Wait a moment for file to be written
-        import time
-        time.sleep(0.5)
-        
-        # Read the generated audio file
-        if os.path.exists(tmp_path):
-            with open(tmp_path, 'rb') as audio_file:
-                audio_data = audio_file.read()
-            
-            # Clean up temporary file
-            os.unlink(tmp_path)
-            
-            return Response(
-                content=audio_data,
-                media_type="audio/wav",
-                headers={
-                    "Content-Disposition": f'inline; filename="speech.wav"'
-                }
-            )
-        else:
-            raise Exception("Failed to generate audio file")
-    
+        audio_data = await run_in_threadpool(
+            _synthesize_speech_to_bytes, request.text, request.rate, request.volume
+        )
+
+        return Response(
+            content=audio_data,
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": 'inline; filename="speech.wav"'
+            },
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"TTS Error: {str(e)}"
+            detail=f"TTS Error: {str(e)}",
         )
-
+ 
