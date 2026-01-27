@@ -19,4 +19,3 @@ bcrypt==4.1.2
 langchain
 langchain-community
 langchain-google-genai
-pyttsx3==2.90

@@ -142,26 +142,6 @@ export const chatApi = {
   }
 }
 
-export const ttsApi = {
-  async speak(text: string, rate: number = 150, volume: number = 0.9): Promise<Blob> {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${API_BASE_URL}/api/v1/tts/speak`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-      body: JSON.stringify({ text, rate, volume }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`TTS failed: ${response.statusText}`)
-    }
-
-    return await response.blob()
-  }
-}
-
 export interface PronunciationAssessmentRequest {
   word_or_phrase: string
   user_transcript: string

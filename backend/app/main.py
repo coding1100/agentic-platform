@@ -49,10 +49,6 @@ app.include_router(public.router, prefix="/api/v1/public", tags=["public"])
 from app.api.v1 import chat_stream
 app.include_router(chat_stream.router, prefix="/api/v1/chat", tags=["chat"])
 
-# Import and include TTS router
-from app.api.v1 import tts
-app.include_router(tts.router, prefix="/api/v1/tts", tags=["tts"])
-
 
 @app.on_event("startup")
 def startup_seed_prebuilt_agents() -> None:
@@ -68,3 +64,4 @@ def startup_seed_prebuilt_agents() -> None:
 async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
+ 

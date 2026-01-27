@@ -57,16 +57,10 @@
       </div>
 
       <div class="question-card">
-        <!-- Instructions with TTS -->
         <div class="instructions-section">
           <div class="instructions-text">
             {{ questionTextOnly }}
           </div>
-          <button @click="speakInstructions" class="tts-btn" :disabled="isSpeaking">
-            <span v-if="!isSpeaking">🔊</span>
-            <span v-else>⏸️</span>
-            {{ isSpeaking ? 'Speaking...' : 'Listen' }}
-          </button>
         </div>
         
         <!-- Response Type Toggle -->
@@ -237,7 +231,6 @@ import { useRoute } from 'vue-router'
 import { useTutorStore } from '@/stores/tutor'
 import { useChatStore } from '@/stores/chat'
 import { parseQuiz, type QuizQuestion } from '@/utils/quizParser'
-import { ttsApi } from '@/services/api'
 import type { Topic, Level } from '@/stores/tutor'
 
 const props = defineProps<{
@@ -283,8 +276,6 @@ const answers = ref<Record<number, {
   isCorrect?: boolean 
 }>>({})
 const results = ref<{ correct: number; total: number; percentage: number; weakAreas: string[] } | null>(null)
-const isSpeaking = ref(false)
-const currentAudio = ref<HTMLAudioElement | null>(null)
 
 const currentQuestion = computed(() => questions.value[currentQuestionIndex.value])
 
@@ -377,14 +368,7 @@ const scoreClass = computed(() => {
 })
 
 onMounted(async () => {
-  // Auto-speak instructions when question loads
-  watch(() => currentQuestion.value, () => {
-    if (currentQuestion.value && quizStarted.value) {
-      setTimeout(() => {
-        speakInstructions()
-      }, 500)
-    }
-  }, { immediate: false })
+  // TTS has been removed; no side effects on mount
 })
 
 function selectLevel(level: Level) {
@@ -561,46 +545,8 @@ watch(() => chatStore.messages, (newMessages, oldMessages) => {
   }
 }, { deep: true, immediate: true })
 
-async function speakInstructions() {
-  if (!currentQuestion.value || isSpeaking.value) return
-  
-  try {
-    isSpeaking.value = true
-    
-    // Stop any currently playing audio
-    if (currentAudio.value) {
-      currentAudio.value.pause()
-      currentAudio.value = null
-    }
-    
-    // Speak only the question text, not the options
-    const textToSpeak = questionTextOnly.value
-    const audioBlob = await ttsApi.speak(textToSpeak, 150, 0.9)
-    const audioUrl = URL.createObjectURL(audioBlob)
-    
-    const audio = new Audio(audioUrl)
-    currentAudio.value = audio
-    
-    audio.onended = () => {
-      isSpeaking.value = false
-      URL.revokeObjectURL(audioUrl)
-    }
-    
-    audio.onerror = () => {
-      isSpeaking.value = false
-      URL.revokeObjectURL(audioUrl)
-    }
-    
-    await audio.play()
-  } catch (error) {
-    console.error('TTS Error:', error)
-    isSpeaking.value = false
-  }
-}
-
 function startQuiz() {
   quizStarted.value = true
-  speakInstructions()
 }
 
 function selectAnswer(letter: string) {
@@ -1002,28 +948,12 @@ async function pollForValidation(maxAttempts = 15, delay = 500): Promise<{ isCor
   return { isCorrect: false, response: 'Validation response not received. Using direct comparison...' }
 }
 
-async function speakText(text: string) {
-  try {
-    const audioBlob = await ttsApi.speak(text, 150, 0.9)
-    const audioUrl = URL.createObjectURL(audioBlob)
-    const audio = new Audio(audioUrl)
-    await audio.play()
-    audio.onended = () => URL.revokeObjectURL(audioUrl)
-  } catch (error) {
-    console.error('TTS Error:', error)
-  }
-}
-
 function retryQuestion() {
   showResult.value = false
   isValidatingAnswer.value = false
   aiValidationResponse.value = null
   selectedAnswer.value = null
   typedAnswer.value = ''
-  // Speak the question again
-  setTimeout(() => {
-    speakInstructions()
-  }, 300)
 }
 
 function nextQuestion() {
@@ -1035,10 +965,6 @@ function nextQuestion() {
     selectedAnswer.value = null
     typedAnswer.value = ''
     showResult.value = false
-    // Auto-speak next question
-    setTimeout(() => {
-      speakInstructions()
-    }, 500)
   }
 }
 
@@ -1342,29 +1268,6 @@ h2 {
   font-weight: 600;
   line-height: 1.6;
   flex: 1;
-}
-
-.tts-btn {
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.tts-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.tts-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .response-type-toggle {
