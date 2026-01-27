@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { AssessmentDesign } from '@/stores/courseCreation'
 
 const emit = defineEmits<{
