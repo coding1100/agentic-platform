@@ -421,8 +421,71 @@ function handleValidationReviewComplete(result: any) {
 }
 
 function handleFinalReviewComplete() {
-  // Course creation complete - could show success message or export
-  alert('Course creation completed successfully!')
+  // On final completion, ask the Course Creation Agent to generate a full course summary/syllabus
+  // based on the structured data we've collected, then return user to dashboard.
+  const overview = courseCreationStore.courseOverview
+  const modules = courseCreationStore.courseModules
+  const assessments = courseCreationStore.assessmentDesign
+  const conceptMap = courseCreationStore.conceptMap
+  const workflow = courseCreationStore.workflowAutomation
+  const validation = courseCreationStore.validationResult
+
+  const summaryPrompt = `
+Using the following structured course design data, generate a final, exportable course syllabus.
+
+COURSE OVERVIEW:
+- Title: ${overview.title}
+- Subject: ${overview.subject}
+- Duration (weeks): ${overview.duration}
+- Difficulty: ${overview.difficulty}
+- Target Audience: ${overview.targetAudience}
+- Learning Objectives:
+${overview.learningObjectives.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}
+
+COURSE MODULES:
+${modules
+  .map(
+    (m, i) => `Module ${i + 1}: ${m.name}
+Description: ${m.description}
+Lessons:
+${m.lessons
+  .map(
+    (l, j) =>
+      `  ${j + 1}. ${l.title} (${l.duration}h) - Topics: ${l.topics.join(', ')}`
+  )
+  .join('\n')}`
+  )
+  .join('\n\n')}
+
+ASSESSMENT DESIGN:
+${JSON.stringify(assessments, null, 2)}
+
+CONCEPT MAP:
+${conceptMap ? JSON.stringify(conceptMap, null, 2) : 'Not provided'}
+
+WORKFLOW AUTOMATION:
+${JSON.stringify(workflow, null, 2)}
+
+VALIDATION RESULT:
+${validation ? JSON.stringify(validation, null, 2) : 'Not provided'}
+
+Generate a clean, human-readable syllabus with:
+- A short course description
+- List of modules and lessons
+- Assessment plan
+- Any relevant notes for instructors.
+`
+
+  // Fire-and-forget: send to agent so the final syllabus appears in the sidebar chat history.
+  if (courseCreationStore.conversationId) {
+    chatStore.sendMessage(
+      agentId,
+      summaryPrompt,
+      courseCreationStore.conversationId
+    )
+  }
+
+  alert('Course creation completed. A detailed syllabus has been generated in the chat sidebar.')
   router.push('/dashboard')
 }
 
