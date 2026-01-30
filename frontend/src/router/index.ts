@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/agents/:agentId/course-syllabus',
+      name: 'CourseSyllabus',
+      component: () => import('@/views/CourseSyllabus.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/api-keys',
       name: 'ApiKeys',
       component: () => import('@/views/ApiKeys.vue'),

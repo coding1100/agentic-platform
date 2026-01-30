@@ -420,9 +420,9 @@ function handleValidationReviewComplete(result: any) {
   courseCreationStore.setStep('final-review')
 }
 
-function handleFinalReviewComplete() {
+async function handleFinalReviewComplete() {
   // On final completion, ask the Course Creation Agent to generate a full course summary/syllabus
-  // based on the structured data we've collected, then return user to dashboard.
+  // based on the structured data we've collected, then route to syllabus page.
   const overview = courseCreationStore.courseOverview
   const modules = courseCreationStore.courseModules
   const assessments = courseCreationStore.assessmentDesign
@@ -476,17 +476,41 @@ Generate a clean, human-readable syllabus with:
 - Any relevant notes for instructors.
 `
 
-  // Fire-and-forget: send to agent so the final syllabus appears in the sidebar chat history.
+  // Send message to agent and wait for response
   if (courseCreationStore.conversationId) {
-    chatStore.sendMessage(
+    const result = await chatStore.sendMessage(
       agentId,
       summaryPrompt,
       courseCreationStore.conversationId
     )
-  }
 
-  alert('Course creation completed. A detailed syllabus has been generated in the chat sidebar.')
-  router.push('/dashboard')
+    if (result.success) {
+      // Wait a bit for the message to be processed and then fetch the conversation
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      await chatStore.fetchConversation(courseCreationStore.conversationId!)
+
+      // Get the last assistant message (the syllabus)
+      const messages = chatStore.messages
+      const lastAssistantMessage = [...messages]
+        .reverse()
+        .find(msg => msg.role === 'assistant')
+
+      if (lastAssistantMessage) {
+        courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
+      }
+
+      // Route to syllabus page
+      router.push({
+        name: 'CourseSyllabus',
+        params: { agentId },
+        query: { conversation_id: courseCreationStore.conversationId }
+      })
+    } else {
+      alert('Failed to generate syllabus. Please try again.')
+    }
+  } else {
+    alert('No conversation found. Please try again.')
+  }
 }
 
 function goBack() {

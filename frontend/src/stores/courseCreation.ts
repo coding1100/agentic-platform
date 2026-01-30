@@ -115,6 +115,7 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
   const validationResult = ref<ValidationResult | null>(null)
   const meetingNotes = ref<MeetingNotes | null>(null)
   const conversationId = ref<string | null>(null)
+  const generatedSyllabus = ref<string | null>(null)
 
   function setStep(step: CourseCreationStep) {
     currentStep.value = step
@@ -163,6 +164,10 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     conversationId.value = id
   }
 
+  function setGeneratedSyllabus(syllabus: string) {
+    generatedSyllabus.value = syllabus
+  }
+
   function reset() {
     currentStep.value = 'course-overview'
     courseOverview.value = {
@@ -191,6 +196,7 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     validationResult.value = null
     meetingNotes.value = null
     conversationId.value = null
+    generatedSyllabus.value = null
   }
 
   return {
@@ -204,6 +210,7 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     validationResult,
     meetingNotes,
     conversationId,
+    generatedSyllabus,
     // Actions
     setStep,
     setCourseOverview,
@@ -216,6 +223,7 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     setValidationResult,
     setMeetingNotes,
     setConversationId,
+    setGeneratedSyllabus,
     reset
   }
 })
