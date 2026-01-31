@@ -198,7 +198,8 @@
           <!-- Final Review Step -->
           <FinalReviewForm 
             v-else-if="courseCreationStore.currentStep === 'final-review'"
-            @complete="handleFinalReviewComplete" 
+            @complete="handleFinalReviewComplete"
+            :isGenerating="isGeneratingSyllabus"
           />
         </div>
       </main>
@@ -233,6 +234,7 @@ const sidebarInput = ref('')
 const sidebarMessagesRef = ref<HTMLElement | null>(null)
 const isChatMinimized = ref(false)
 const showPreview = ref(false)
+const isGeneratingSyllabus = ref(false)
 
 const agent = computed(() => agentsStore.selectedAgent)
 const messages = computed(() => chatStore.messages)
@@ -423,14 +425,17 @@ function handleValidationReviewComplete(result: any) {
 async function handleFinalReviewComplete() {
   // On final completion, ask the Course Creation Agent to generate a full course summary/syllabus
   // based on the structured data we've collected, then route to syllabus page.
-  const overview = courseCreationStore.courseOverview
-  const modules = courseCreationStore.courseModules
-  const assessments = courseCreationStore.assessmentDesign
-  const conceptMap = courseCreationStore.conceptMap
-  const workflow = courseCreationStore.workflowAutomation
-  const validation = courseCreationStore.validationResult
+  isGeneratingSyllabus.value = true
+  
+  try {
+    const overview = courseCreationStore.courseOverview
+    const modules = courseCreationStore.courseModules
+    const assessments = courseCreationStore.assessmentDesign
+    const conceptMap = courseCreationStore.conceptMap
+    const workflow = courseCreationStore.workflowAutomation
+    const validation = courseCreationStore.validationResult
 
-  const summaryPrompt = `
+    const summaryPrompt = `
 Using the following structured course design data, generate a final, exportable course syllabus.
 
 COURSE OVERVIEW:
@@ -476,29 +481,54 @@ Generate a clean, human-readable syllabus with:
 - Any relevant notes for instructors.
 `
 
-  // Send message to agent and wait for response
-  if (courseCreationStore.conversationId) {
+    // Send message to agent and wait for response
+    if (!courseCreationStore.conversationId) {
+      alert('No conversation found. Please try again.')
+      isGeneratingSyllabus.value = false
+      return
+    }
+
     const result = await chatStore.sendMessage(
       agentId,
       summaryPrompt,
       courseCreationStore.conversationId
     )
 
-    if (result.success) {
-      // Wait a bit for the message to be processed and then fetch the conversation
+    if (!result.success) {
+      alert(`Failed to generate syllabus: ${result.error || 'Unknown error'}`)
+      isGeneratingSyllabus.value = false
+      return
+    }
+
+    // Poll for the assistant response (max 30 seconds, check every 2 seconds)
+    const maxAttempts = 15
+    let attempts = 0
+    let lastAssistantMessage = null
+
+    while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 2000))
-      await chatStore.fetchConversation(courseCreationStore.conversationId!)
+      await chatStore.fetchConversation(courseCreationStore.conversationId!, true)
 
-      // Get the last assistant message (the syllabus)
       const messages = chatStore.messages
-      const lastAssistantMessage = [...messages]
-        .reverse()
-        .find(msg => msg.role === 'assistant')
-
-      if (lastAssistantMessage) {
-        courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
+      const assistantMessages = messages.filter(msg => msg.role === 'assistant')
+      
+      if (assistantMessages.length > 0) {
+        const latestMessage = assistantMessages[assistantMessages.length - 1]
+        // Check if this is a new message (not the greeting)
+        if (latestMessage.content && latestMessage.content.length > 100) {
+          lastAssistantMessage = latestMessage
+          break
+        }
       }
+      
+      attempts++
+    }
 
+    if (lastAssistantMessage && lastAssistantMessage.content) {
+      console.log('Syllabus generated, length:', lastAssistantMessage.content.length)
+      courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
+      console.log('Syllabus stored, routing to syllabus page')
+      
       // Route to syllabus page
       router.push({
         name: 'CourseSyllabus',
@@ -506,10 +536,14 @@ Generate a clean, human-readable syllabus with:
         query: { conversation_id: courseCreationStore.conversationId }
       })
     } else {
-      alert('Failed to generate syllabus. Please try again.')
+      console.warn('No syllabus message found after polling')
+      alert('Syllabus generation is taking longer than expected. Please check the chat sidebar for the syllabus or try again.')
+      isGeneratingSyllabus.value = false
     }
-  } else {
-    alert('No conversation found. Please try again.')
+  } catch (error: any) {
+    console.error('Error generating syllabus:', error)
+    alert(`Error generating syllabus: ${error.message || 'Unknown error'}`)
+    isGeneratingSyllabus.value = false
   }
 }
 

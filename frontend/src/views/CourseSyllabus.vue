@@ -78,7 +78,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCourseCreationStore } from '@/stores/courseCreation'
 import { useChatStore } from '@/stores/chat'
-import * as html2pdf from 'html2pdf.js'
+// @ts-ignore - html2pdf.js doesn't have TypeScript definitions
+import html2pdf from 'html2pdf.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -93,28 +94,45 @@ const courseModules = computed(() => courseCreationStore.courseModules)
 const assessmentDesign = computed(() => courseCreationStore.assessmentDesign)
 
 onMounted(async () => {
+  console.log('CourseSyllabus mounted, syllabusContent:', syllabusContent.value)
+  console.log('Route query:', route.query)
+  
   // If syllabus is not yet generated, try to get it from the last assistant message
   if (!syllabusContent.value) {
     loading.value = true
     try {
-      const conversationId = route.query.conversation_id as string
+      const conversationId = route.query.conversation_id as string || courseCreationStore.conversationId
+      console.log('Fetching conversation:', conversationId)
+      
       if (conversationId) {
-        await chatStore.fetchConversation(conversationId)
+        await chatStore.fetchConversation(conversationId, true)
         // Get the last assistant message which should be the syllabus
         const messages = chatStore.messages
-        const lastAssistantMessage = [...messages]
-          .reverse()
-          .find(msg => msg.role === 'assistant')
+        console.log('Messages fetched:', messages.length)
         
-        if (lastAssistantMessage) {
-          courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant')
+        console.log('Assistant messages:', assistantMessages.length)
+        
+        if (assistantMessages.length > 0) {
+          // Get the last assistant message (should be the syllabus)
+          const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+          console.log('Last assistant message length:', lastAssistantMessage.content?.length)
+          
+          if (lastAssistantMessage && lastAssistantMessage.content && lastAssistantMessage.content.length > 100) {
+            courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
+            console.log('Syllabus set in store')
+          }
         }
+      } else {
+        console.warn('No conversation ID found')
       }
     } catch (error) {
       console.error('Failed to fetch syllabus:', error)
     } finally {
       loading.value = false
     }
+  } else {
+    console.log('Syllabus already in store')
   }
 })
 
@@ -156,8 +174,7 @@ async function downloadPDF() {
   }
 
   try {
-    const html2pdfLib = html2pdf as any
-    await html2pdfLib().set(opt).from(element).save()
+    await html2pdf().set(opt).from(element).save()
   } catch (error) {
     console.error('Failed to generate PDF:', error)
     alert('Failed to generate PDF. Please try again.')

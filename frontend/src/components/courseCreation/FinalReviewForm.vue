@@ -25,9 +25,12 @@
       </div>
 
       <div class="form-actions">
-        <button @click="handleBack" class="btn-back">← Back</button>
-        <button @click="handleComplete" class="btn-primary">
-          Complete Course Creation ✓
+        <button @click="handleBack" class="btn-back" :disabled="isGenerating">← Back</button>
+        <button @click="handleComplete" class="btn-primary" :disabled="isGenerating">
+          <span v-if="isGenerating">
+            <span class="spinner-small"></span> Generating Syllabus...
+          </span>
+          <span v-else>Complete Course Creation ✓</span>
         </button>
       </div>
     </div>
@@ -42,7 +45,12 @@ const emit = defineEmits<{
   complete: []
 }>()
 
+const props = defineProps<{
+  isGenerating?: boolean
+}>()
+
 const courseCreationStore = useCourseCreationStore()
+const isGenerating = computed(() => props.isGenerating || false)
 
 const courseOverview = computed(() => courseCreationStore.courseOverview)
 const courseModules = computed(() => courseCreationStore.courseModules)
@@ -156,9 +164,31 @@ h2 {
   transition: all 0.3s ease;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: rgba(76, 175, 80, 0.4);
   transform: translateY(-2px);
+}
+
+.btn-primary:disabled,
+.btn-back:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
 
