@@ -423,176 +423,156 @@ function handleValidationReviewComplete(result: any) {
 }
 
 async function handleFinalReviewComplete() {
-  // On final completion, ask the Course Creation Agent to generate a full course summary/syllabus
-  // based on the structured data we've collected, then route to syllabus page.
+  // On final completion, build a deterministic, professional syllabus
+  // directly from the structured data we have, without calling the LLM.
   isGeneratingSyllabus.value = true
-  
+
   try {
     const overview = courseCreationStore.courseOverview
     const modules = courseCreationStore.courseModules
     const assessments = courseCreationStore.assessmentDesign
-    const conceptMap = courseCreationStore.conceptMap
-    const workflow = courseCreationStore.workflowAutomation
-    const validation = courseCreationStore.validationResult
 
-    const summaryPrompt = `
-You are generating a professional, comprehensive course syllabus. Use ONLY the course data provided below. DO NOT generate random questions, quizzes, or unrelated content.
+    const lines: string[] = []
 
-CRITICAL INSTRUCTIONS:
-1. Generate ONLY a syllabus document - no questions, no quizzes, no interactive content
-2. Use EXACTLY the course data provided below
-3. Format as a clean, professional academic syllabus
-4. Include all modules and lessons exactly as provided
-5. Structure the assessment plan based on the assessment design data
-6. Write in a formal, academic tone suitable for course documentation
+    // Title
+    lines.push('# COURSE SYLLABUS')
+    lines.push('')
 
-COURSE DATA TO USE:
+    // Course Overview
+    lines.push('## Course Overview')
+    const difficultyText = overview.difficulty
+      ? overview.difficulty.charAt(0).toUpperCase() + overview.difficulty.slice(1)
+      : ''
+    const durationText = overview.duration ? `${overview.duration}‑week` : ''
+    const audienceText = overview.targetAudience || 'the intended learners'
 
-COURSE OVERVIEW:
-- Title: ${overview.title}
-- Subject: ${overview.subject}
-- Duration: ${overview.duration} weeks
-- Difficulty Level: ${overview.difficulty}
-- Target Audience: ${overview.targetAudience}
-- Learning Objectives:
-${overview.learningObjectives.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}
-
-COURSE MODULES AND LESSONS:
-${modules
-  .map(
-    (m, i) => `Module ${i + 1}: ${m.name}
-  Description: ${m.description}
-  Lessons in this module:
-${m.lessons
-  .map(
-    (l, j) =>
-      `    ${j + 1}. ${l.title} (Duration: ${l.duration} hours)
-       Topics Covered: ${l.topics.join(', ')}`
-  )
-  .join('\n')}`
-  )
-  .join('\n\n')}
-
-ASSESSMENT DESIGN:
-${assessments.diagnostic ? '✓ Diagnostic Assessments: Included' : '✗ Diagnostic Assessments: Not included'}
-${assessments.formative ? '✓ Formative Assessments: Included' : '✗ Formative Assessments: Not included'}
-${assessments.summative ? '✓ Summative Assessments: Included' : '✗ Summative Assessments: Not included'}
-${assessments.comprehensive ? '✓ Comprehensive Assessments: Included' : '✗ Comprehensive Assessments: Not included'}
-${assessments.assessmentDetails && assessments.assessmentDetails.length > 0 ? `
-Assessment Details:
-${assessments.assessmentDetails.map((detail: any, idx: number) => `  ${idx + 1}. ${detail.type}: ${detail.questions} questions (${detail.weight}% of total grade)`).join('\n')}` : ''}
-
-${conceptMap ? `CONCEPT MAP:
-${JSON.stringify(conceptMap, null, 2)}` : ''}
-
-${workflow ? `WORKFLOW AUTOMATION:
-${JSON.stringify(workflow, null, 2)}` : ''}
-
-${validation ? `VALIDATION NOTES:
-${JSON.stringify(validation, null, 2)}` : ''}
-
-SYLLABUS FORMAT REQUIREMENTS:
-Generate a professional syllabus in the following structure:
-
-# COURSE SYLLABUS
-
-## Course Overview
-[Write a 2-3 paragraph description of the course, its purpose, and what students will learn. Use the title, subject, target audience, and learning objectives provided above.]
-
-## Course Information
-- **Course Title:** ${overview.title}
-- **Subject Area:** ${overview.subject}
-- **Duration:** ${overview.duration} weeks
-- **Difficulty Level:** ${overview.difficulty}
-- **Target Audience:** ${overview.targetAudience}
-
-## Learning Objectives
-${overview.learningObjectives.map((o, i) => `${i + 1}. ${o}`).join('\n')}
-
-## Course Structure
-[List ALL modules and lessons exactly as provided above. Format clearly with module numbers, names, descriptions, and all lessons with their topics.]
-
-## Assessment Plan
-[Describe the assessment strategy based on the assessment design data above. Explain what types of assessments will be used, their purpose, and weight distribution. Use the assessment details provided.]
-
-## Course Schedule
-[Provide a week-by-week breakdown showing which modules and lessons will be covered in each week, based on the ${overview.duration}-week duration.]
-
-## Additional Information
-[Include any relevant notes about prerequisites, materials needed, or instructor guidelines based on the validation and workflow data if provided.]
-
----
-
-IMPORTANT: 
-- DO NOT include any quiz questions, multiple-choice questions, or assessment questions in the syllabus
-- DO NOT generate random content unrelated to the course data provided
-- DO NOT create example questions or practice problems
-- ONLY format and present the course information provided above in a professional syllabus format
-- The syllabus should be a DOCUMENT, not an interactive quiz or assessment
-`
-
-    // Send message to agent and wait for response
-    if (!courseCreationStore.conversationId) {
-      alert('No conversation found. Please try again.')
-      isGeneratingSyllabus.value = false
-      return
-    }
-
-    const result = await chatStore.sendMessage(
-      agentId,
-      summaryPrompt,
-      courseCreationStore.conversationId
+    lines.push(
+      `${overview.title} is a ${durationText} ${difficultyText.toLowerCase()} course in ${overview.subject}, ` +
+      `designed for ${audienceText}.`
     )
+    if (overview.learningObjectives && overview.learningObjectives.length > 0) {
+      lines.push(
+        'By the end of this course, learners will be able to achieve the following key learning objectives.'
+      )
+    }
+    lines.push('')
 
-    if (!result.success) {
-      alert(`Failed to generate syllabus: ${result.error || 'Unknown error'}`)
-      isGeneratingSyllabus.value = false
-      return
+    // Course Information
+    lines.push('## Course Information')
+    lines.push(`- **Course Title:** ${overview.title}`)
+    lines.push(`- **Subject Area:** ${overview.subject}`)
+    if (overview.duration) {
+      lines.push(`- **Duration:** ${overview.duration} weeks`)
+    }
+    if (overview.difficulty) {
+      lines.push(`- **Difficulty Level:** ${difficultyText}`)
+    }
+    if (overview.targetAudience) {
+      lines.push(`- **Target Audience:** ${overview.targetAudience}`)
+    }
+    lines.push('')
+
+    // Learning Objectives
+    if (overview.learningObjectives && overview.learningObjectives.length > 0) {
+      lines.push('## Learning Objectives')
+      overview.learningObjectives.forEach((objective: string, index: number) => {
+        lines.push(`${index + 1}. ${objective}`)
+      })
+      lines.push('')
     }
 
-    // Poll for the assistant response (max 30 seconds, check every 2 seconds)
-    const maxAttempts = 15
-    let attempts = 0
-    let lastAssistantMessage = null
+    // Course Structure
+    if (modules && modules.length > 0) {
+      lines.push('## Course Structure')
+      modules.forEach((module: any, moduleIndex: number) => {
+        lines.push('')
+        lines.push(`### Module ${moduleIndex + 1}: ${module.name}`)
+        if (module.description) {
+          lines.push(module.description)
+        }
+        if (module.lessons && module.lessons.length > 0) {
+          lines.push('')
+          lines.push('Lessons in this module:')
+          module.lessons.forEach((lesson: any, lessonIndex: number) => {
+            const duration = lesson.duration ? `${lesson.duration}h` : ''
+            const topics =
+              lesson.topics && lesson.topics.length > 0
+                ? `Topics: ${lesson.topics.join(', ')}`
+                : ''
+            lines.push(
+              `${lessonIndex + 1}. ${lesson.title}${duration ? ` (${duration})` : ''}${
+                topics ? ` – ${topics}` : ''
+              }`
+            )
+          })
+        }
+      })
+      lines.push('')
+    }
 
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await chatStore.fetchConversation(courseCreationStore.conversationId!, true)
+    // Assessment Plan
+    if (assessments) {
+      lines.push('## Assessment Plan')
+      const types: string[] = []
+      if (assessments.diagnostic) types.push('diagnostic assessments')
+      if (assessments.formative) types.push('formative assessments')
+      if (assessments.summative) types.push('summative assessments')
+      if (assessments.comprehensive) types.push('comprehensive assessments')
 
-      const messages = chatStore.messages
-      const assistantMessages = messages.filter(msg => msg.role === 'assistant')
-      
-      if (assistantMessages.length > 0) {
-        const latestMessage = assistantMessages[assistantMessages.length - 1]
-        // Check if this is a new message (not the greeting)
-        if (latestMessage.content && latestMessage.content.length > 100) {
-          lastAssistantMessage = latestMessage
-          break
+      if (types.length > 0) {
+        lines.push(
+          `This course uses ${types.join(
+            ', '
+          )} to measure learner progress and mastery of the material.`
+        )
+      }
+
+      if (assessments.assessmentDetails && assessments.assessmentDetails.length > 0) {
+        lines.push('')
+        lines.push('### Assessment Breakdown')
+        assessments.assessmentDetails.forEach((detail: any, index: number) => {
+          lines.push(
+            `${index + 1}. ${detail.type}: ${detail.questions} questions (${detail.weight}% of final grade)`
+          )
+        })
+      }
+      lines.push('')
+    }
+
+    // Simple schedule based on duration and number of modules
+    if (overview.duration && modules && modules.length > 0) {
+      lines.push('## Course Schedule (Suggested)')
+      const weeks = overview.duration
+      const modulesPerWeek = Math.max(1, Math.floor(modules.length / weeks) || 1)
+
+      let currentModuleIndex = 0
+      for (let week = 1; week <= weeks; week++) {
+        lines.push('')
+        lines.push(`### Week ${week}`)
+        const weekModules: string[] = []
+        for (let m = 0; m < modulesPerWeek && currentModuleIndex < modules.length; m++) {
+          weekModules.push(`Module ${currentModuleIndex + 1}: ${modules[currentModuleIndex].name}`)
+          currentModuleIndex++
+        }
+        if (weekModules.length > 0) {
+          weekModules.forEach((m) => lines.push(`- ${m}`))
+        } else {
+          lines.push('- Review and consolidation of previous modules')
         }
       }
-      
-      attempts++
+      lines.push('')
     }
 
-    if (lastAssistantMessage && lastAssistantMessage.content) {
-      console.log('Syllabus generated, length:', lastAssistantMessage.content.length)
-      courseCreationStore.setGeneratedSyllabus(lastAssistantMessage.content)
-      console.log('Syllabus stored, routing to syllabus page')
-      
-      // Route to syllabus page
-      router.push({
-        name: 'CourseSyllabus',
-        params: { agentId },
-        query: { conversation_id: courseCreationStore.conversationId }
-      })
-    } else {
-      console.warn('No syllabus message found after polling')
-      alert('Syllabus generation is taking longer than expected. Please check the chat sidebar for the syllabus or try again.')
-      isGeneratingSyllabus.value = false
-    }
-  } catch (error: any) {
-    console.error('Error generating syllabus:', error)
-    alert(`Error generating syllabus: ${error.message || 'Unknown error'}`)
+    const syllabus = lines.join('\n')
+    courseCreationStore.setGeneratedSyllabus(syllabus)
+
+    // Route to syllabus page
+    router.push({
+      name: 'CourseSyllabus',
+      params: { agentId },
+      query: { conversation_id: courseCreationStore.conversationId },
+    })
+  } finally {
     isGeneratingSyllabus.value = false
   }
 }
