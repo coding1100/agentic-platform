@@ -1,7 +1,11 @@
 import { streamText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009'
+const defaultBaseUrl =
+  import.meta.env.DEV
+    ? 'http://localhost:8009'
+    : (typeof window !== 'undefined' ? window.location.origin : '')
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultBaseUrl
 
 // Custom provider that uses our backend streaming endpoint
 export async function streamChatResponse(
@@ -78,4 +82,3 @@ export async function streamChatResponse(
     }
   }
 }
-

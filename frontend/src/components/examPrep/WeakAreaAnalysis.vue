@@ -81,6 +81,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExamPrepStore, type WeakArea } from '@/stores/examPrep'
 import { useChatStore } from '@/stores/chat'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const emit = defineEmits<{
   complete: []
@@ -152,7 +153,7 @@ const formattedAnalysis = computed(() => {
   html = html.replace(/MEDIUM PRIORITY/gi, '<span class="priority-medium">MEDIUM PRIORITY</span>')
   html = html.replace(/LOW PRIORITY/gi, '<span class="priority-low">LOW PRIORITY</span>')
   
-  return html
+  return sanitizeHtml(html)
 })
 
 async function loadWeakAreas() {

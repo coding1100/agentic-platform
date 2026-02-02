@@ -249,6 +249,29 @@ export const useMicroLearningStore = defineStore('microLearning', () => {
     conversationId.value = null
   }
 
+  function exportState() {
+    return JSON.parse(JSON.stringify({
+      currentStep: currentStep.value,
+      onboardingData: onboardingData.value,
+      currentLesson: currentLesson.value,
+      lessons: lessons.value,
+      flashcards: flashcards.value,
+      progress: progress.value,
+      conversationId: conversationId.value,
+    }))
+  }
+
+  function importState(state: any) {
+    if (!state || typeof state !== 'object') return
+    if (state.currentStep) currentStep.value = state.currentStep
+    if (state.onboardingData) onboardingData.value = state.onboardingData
+    if (state.currentLesson !== undefined) currentLesson.value = state.currentLesson
+    if (state.lessons) lessons.value = state.lessons
+    if (state.flashcards) flashcards.value = state.flashcards
+    if (state.progress) progress.value = state.progress
+    if (state.conversationId !== undefined) conversationId.value = state.conversationId
+  }
+
   return {
     // State
     currentStep,
@@ -279,6 +302,8 @@ export const useMicroLearningStore = defineStore('microLearning', () => {
     addFlashcards,
     updateFlashcardMastery,
     setConversationId,
+    exportState,
+    importState,
     reset
   }
 })

@@ -34,30 +34,25 @@ class LangchainAgentService:
     llm = self._build_llm(agent)
     system_instructions = agent.system_prompt or ""
 
-    # Simple prompt with chat history support
-    prompt = ChatPromptTemplate.from_messages(
-      [
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-      ]
-    )
+    # Simple prompt with chat history support.
+    # Always include system instructions to keep agent behavior consistent.
+    if system_instructions:
+      prompt = ChatPromptTemplate.from_messages(
+        [
+          ("system", system_instructions),
+          MessagesPlaceholder(variable_name="chat_history"),
+          ("human", "{input}"),
+        ]
+      )
+    else:
+      prompt = ChatPromptTemplate.from_messages(
+        [
+          MessagesPlaceholder(variable_name="chat_history"),
+          ("human", "{input}"),
+        ]
+      )
     
-    # Add system instructions to first message if available
-    from langchain_core.runnables import RunnableLambda
-    
-    def add_system_context(inputs: dict) -> dict:
-      """Add system instructions to the input if this is the first message."""
-      user_input = inputs.get("input", "")
-      chat_history = inputs.get("chat_history", [])
-      
-      # If no history and we have system instructions, prepend them to input
-      if not chat_history and system_instructions:
-        enhanced_input = f"{system_instructions}\n\n{user_input}"
-        return {"input": enhanced_input, "chat_history": []}
-      
-      return {"input": user_input, "chat_history": chat_history}
-    
-    chain = RunnableLambda(add_system_context) | prompt | llm
+    chain = prompt | llm
     return chain
 
   def _history_to_messages(self, history: List[Message], latest_input: str = None) -> List[Any]:
@@ -218,6 +213,11 @@ class LangchainAgentService:
       "generate_topic_review" in latest_lower or
       ("topic" in latest_lower and "review" in latest_lower)
     )
+
+    is_micro_lesson_request = (
+      "generate_micro_lesson" in latest_lower or
+      ("micro-lesson" in latest_lower or "micro lesson" in latest_lower) and "lesson" in latest_lower
+    )
     
     # If it's a schedule request for exam prep agent, generate directly
     if is_schedule_request and agent.is_prebuilt:
@@ -314,6 +314,46 @@ class LangchainAgentService:
         except Exception as e:
           import traceback
           print(f"❌ Topic review tool failed: {traceback.format_exc()}")
+
+    # If it's a micro-lesson request for micro learning agent, generate directly
+    if is_micro_lesson_request and agent.is_prebuilt:
+      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _generate_micro_lesson
+      if agent.slug == PREBUILT_AGENT_SLUGS["micro_learning_agent"]:
+        import re
+        # Extract parameters
+        topic_match = re.search(r'topic[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        if not topic_match:
+          topic_match = re.search(r'(?:about|on|for)\s+([^,\.\n]+)', latest_input, re.IGNORECASE)
+        topic = topic_match.group(1).strip().strip('"') if topic_match else "General Topic"
+
+        minutes_match = re.search(r'time_minutes[:\s]+(\d+)', latest_input, re.IGNORECASE)
+        if not minutes_match:
+          minutes_match = re.search(r'(\d+)\s*(?:minutes?|mins?)', latest_input, re.IGNORECASE)
+        time_minutes = int(minutes_match.group(1)) if minutes_match else 10
+
+        difficulty_match = re.search(r'difficulty[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
+        if not difficulty_match:
+          difficulty_match = re.search(r'(easy|medium|hard|beginner|intermediate|advanced)', latest_input, re.IGNORECASE)
+        difficulty = difficulty_match.group(1).strip().lower().strip('"') if difficulty_match else "medium"
+        if difficulty in ["beginner"]:
+          difficulty = "easy"
+        elif difficulty in ["intermediate"]:
+          difficulty = "medium"
+        elif difficulty in ["advanced"]:
+          difficulty = "hard"
+
+        try:
+          print(f"🎯 Intercepting micro-lesson request: topic={topic}, time_minutes={time_minutes}, difficulty={difficulty}")
+          lesson_output = _generate_micro_lesson(
+            topic=topic,
+            time_minutes=time_minutes,
+            difficulty=difficulty
+          )
+          print(f"✅ Micro-lesson generated successfully, length: {len(lesson_output)} chars")
+          return lesson_output
+        except Exception as e:
+          import traceback
+          print(f"❌ Micro-lesson tool failed: {traceback.format_exc()}")
     
     # If it's a quiz request for prebuilt agents, generate directly
     if is_quiz_request and agent.is_prebuilt:

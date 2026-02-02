@@ -90,6 +90,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExamPrepStore } from '@/stores/examPrep'
 import { useChatStore } from '@/stores/chat'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const emit = defineEmits<{
   complete: []
@@ -307,7 +308,7 @@ const formattedReview = computed(() => {
   // Add spacing after headers
   html = html.replace(/(<\/h[234]>)</g, '$1\n')
   
-  return html
+  return sanitizeHtml(html)
 })
 
 async function loadTopicReview() {

@@ -174,6 +174,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { useChatStore } from '@/stores/chat'
 import { useLanguagePracticeStore } from '@/stores/languagePractice'
+import { usePersistedStore } from '@/composables/usePersistedStore'
 import LanguageSelectionForm from '@/components/languagePractice/LanguageSelectionForm.vue'
 import PlacementTestForm from '@/components/languagePractice/PlacementTestForm.vue'
 import LearningGoalsForm from '@/components/languagePractice/LearningGoalsForm.vue'
@@ -182,6 +183,7 @@ import GrammarPracticeForm from '@/components/languagePractice/GrammarPracticeFo
 import ConversationPracticeForm from '@/components/languagePractice/ConversationPracticeForm.vue'
 import PronunciationPracticeForm from '@/components/languagePractice/PronunciationPracticeForm.vue'
 import ProgressDashboardForm from '@/components/languagePractice/ProgressDashboardForm.vue'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -198,6 +200,13 @@ const isChatMinimized = ref(false)
 const agent = computed(() => agentsStore.selectedAgent)
 const messages = computed(() => chatStore.messages)
 const isLoading = computed(() => chatStore.sending || chatStore.loading)
+
+const { ready: languagePracticeReady } = usePersistedStore(
+  `languagePractice:${agentId}`,
+  () => languagePracticeStore.exportState(),
+  (data) => languagePracticeStore.importState(data),
+  () => languagePracticeStore.$state
+)
 
 const steps = [
   { id: 'language-selection', label: 'Language' },
@@ -277,13 +286,20 @@ const aiSuggestions = computed(() => {
 })
 
 onMounted(async () => {
+  await languagePracticeReady
   await agentsStore.fetchAgent(agentId)
   
   // Initialize conversation
-  const conversationId = route.query.conversation_id as string
+  const conversationId = (route.query.conversation_id as string) || languagePracticeStore.conversationId
   if (conversationId) {
     await chatStore.fetchConversation(conversationId)
     languagePracticeStore.setConversationId(conversationId)
+    if (!route.query.conversation_id) {
+      router.replace({
+        path: route.path,
+        query: { ...route.query, conversation_id: conversationId }
+      })
+    }
   } else {
     const result = await chatStore.createConversation(agentId)
     if (result.success && result.conversation) {
@@ -333,10 +349,11 @@ function formatTime(dateString: string) {
 }
 
 function formatMessage(content: string): string {
-  return content
+  const formatted = content
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
+  return sanitizeHtml(formatted)
 }
 
 function handleLanguageSelectionComplete(profile: any) {

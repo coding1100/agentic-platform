@@ -118,12 +118,14 @@ import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { useChatStore } from '@/stores/chat'
 import { useTutorStore } from '@/stores/tutor'
+import { usePersistedStore } from '@/composables/usePersistedStore'
 import ChildDetailsForm from '@/components/tutor/ChildDetailsForm.vue'
 import SubjectSelectionForm from '@/components/tutor/SubjectSelectionForm.vue'
 import SkillAssessmentForm from '@/components/tutor/SkillAssessmentForm.vue'
 import FocusAreasForm from '@/components/tutor/FocusAreasForm.vue'
 import TopicMenu from '@/components/tutor/TopicMenu.vue'
 import LearningArea from '@/components/tutor/LearningArea.vue'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,14 +143,28 @@ const agent = computed(() => agentsStore.selectedAgent)
 const messages = computed(() => chatStore.messages)
 const isLoading = computed(() => chatStore.sending || chatStore.loading)
 
+const { ready: tutorReady } = usePersistedStore(
+  `tutor:${agentId}`,
+  () => tutorStore.exportState(),
+  (data) => tutorStore.importState(data),
+  () => tutorStore.$state
+)
+
 onMounted(async () => {
+  await tutorReady
   await agentsStore.fetchAgent(agentId)
   
   // Initialize conversation
-  const conversationId = route.query.conversation_id as string
+  const conversationId = (route.query.conversation_id as string) || tutorStore.conversationId
   if (conversationId) {
     await chatStore.fetchConversation(conversationId)
     tutorStore.setConversationId(conversationId)
+    if (!route.query.conversation_id) {
+      router.replace({
+        path: route.path,
+        query: { ...route.query, conversation_id: conversationId }
+      })
+    }
   } else {
     const result = await chatStore.createConversation(agentId)
     if (result.success && result.conversation) {
@@ -198,10 +214,11 @@ function formatTime(dateString: string) {
 }
 
 function formatMessage(content: string): string {
-  return content
+  const formatted = content
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
+  return sanitizeHtml(formatted)
 }
 
 function handleChildDetailsComplete(details: { name: string }) {
@@ -216,7 +233,11 @@ function handleSubjectComplete(subject: any) {
 
 function handleSkillAssessmentComplete(assessment: { proficiency: 'beginner' | 'intermediate' | 'advanced'; subject: any }) {
   tutorStore.setSkillAssessment(assessment)
-  tutorStore.setStep('focus-areas')
+  if (tutorStore.focusAreas.length === 0) {
+    tutorStore.setStep('topic-menu')
+  } else {
+    tutorStore.setStep('focus-areas')
+  }
 }
 
 function handleFocusAreasComplete() {
@@ -637,4 +658,3 @@ h1 {
   }
 }
 </style>
-

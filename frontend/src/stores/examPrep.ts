@@ -257,6 +257,34 @@ export const useExamPrepStore = defineStore('examPrep', () => {
     progressData.value = null
     weakAreas.value = []
     currentTopicReview.value = null
+    justSubmittedExam.value = false
+  }
+
+  function exportState() {
+    return JSON.parse(JSON.stringify({
+      currentStep: currentStep.value,
+      conversationId: conversationId.value,
+      examInfo: examInfo.value,
+      studySchedule: studySchedule.value,
+      currentPracticeExam: currentPracticeExam.value,
+      progressData: progressData.value,
+      weakAreas: weakAreas.value,
+      currentTopicReview: currentTopicReview.value,
+      justSubmittedExam: justSubmittedExam.value,
+    }))
+  }
+
+  function importState(state: any) {
+    if (!state || typeof state !== 'object') return
+    if (state.currentStep) currentStep.value = state.currentStep
+    if (state.conversationId !== undefined) conversationId.value = state.conversationId
+    if (state.examInfo) examInfo.value = state.examInfo
+    if (state.studySchedule !== undefined) studySchedule.value = state.studySchedule
+    if (state.currentPracticeExam !== undefined) currentPracticeExam.value = state.currentPracticeExam
+    if (state.progressData !== undefined) progressData.value = state.progressData
+    if (state.weakAreas) weakAreas.value = state.weakAreas
+    if (state.currentTopicReview !== undefined) currentTopicReview.value = state.currentTopicReview
+    if (state.justSubmittedExam !== undefined) justSubmittedExam.value = state.justSubmittedExam
   }
 
   return {
@@ -282,6 +310,8 @@ export const useExamPrepStore = defineStore('examPrep', () => {
     setCurrentTopicReview,
     addPracticeScore,
     setJustSubmittedExam,
+    exportState,
+    importState,
     reset
   }
 })

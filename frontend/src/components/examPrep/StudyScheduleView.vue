@@ -29,6 +29,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useExamPrepStore } from '@/stores/examPrep'
 import { useChatStore } from '@/stores/chat'
 import { useRoute } from 'vue-router'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const emit = defineEmits<{
   complete: []
@@ -518,7 +519,7 @@ const formattedSchedule = computed(() => {
   formatted = formatted.replace(/<p class="schedule-paragraph"><\/p>/g, '')
   formatted = formatted.replace(/<p class="schedule-paragraph"><br><\/p>/g, '<br>')
   
-  return formatted
+  return sanitizeHtml(formatted)
 })
 
 function handleBack() {

@@ -78,6 +78,7 @@ import CourseCreation from '@/views/CourseCreation.vue'
 import LanguagePractice from '@/views/LanguagePractice.vue'
 import MicroLearning from '@/views/MicroLearning.vue'
 import ExamPrep from '@/views/ExamPrep.vue'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -186,10 +187,11 @@ function isQuizMessage(content: string): boolean {
 
 function formatMessage(content: string): string {
   // Basic markdown-like formatting
-  return content
+  const formatted = content
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
+  return sanitizeHtml(formatted)
 }
 
 function goBack() {
@@ -478,4 +480,3 @@ h1 {
   }
 }
 </style>
-

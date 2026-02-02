@@ -171,6 +171,43 @@ export const useTutorStore = defineStore('tutor', () => {
     wrongAnswers.value = {}
   }
 
+  function exportState() {
+    return JSON.parse(JSON.stringify({
+      currentStep: currentStep.value,
+      childDetails: childDetails.value,
+      selectedSubject: selectedSubject.value,
+      skillAssessment: skillAssessment.value,
+      focusAreas: focusAreas.value,
+      selectedTopic: selectedTopic.value,
+      currentLevel: currentLevel.value,
+      currentGame: currentGame.value,
+      currentQuiz: currentQuiz.value,
+      quizResults: quizResults.value,
+      conversationId: conversationId.value,
+      levelProgress: levelProgress.value,
+      wrongAnswers: wrongAnswers.value,
+      topics: topics.value,
+    }))
+  }
+
+  function importState(state: any) {
+    if (!state || typeof state !== 'object') return
+    if (state.currentStep) currentStep.value = state.currentStep
+    if (state.childDetails) childDetails.value = state.childDetails
+    if (state.selectedSubject !== undefined) selectedSubject.value = state.selectedSubject
+    if (state.skillAssessment) skillAssessment.value = state.skillAssessment
+    if (state.focusAreas) focusAreas.value = state.focusAreas
+    if (state.selectedTopic !== undefined) selectedTopic.value = state.selectedTopic
+    if (state.currentLevel !== undefined) currentLevel.value = state.currentLevel
+    if (state.currentGame !== undefined) currentGame.value = state.currentGame
+    if (state.currentQuiz !== undefined) currentQuiz.value = state.currentQuiz
+    if (state.quizResults !== undefined) quizResults.value = state.quizResults
+    if (state.conversationId !== undefined) conversationId.value = state.conversationId
+    if (state.levelProgress) levelProgress.value = state.levelProgress
+    if (state.wrongAnswers) wrongAnswers.value = state.wrongAnswers
+    if (state.topics) topics.value = state.topics
+  }
+
     return {
     currentStep,
     childDetails,
@@ -203,7 +240,8 @@ export const useTutorStore = defineStore('tutor', () => {
     resetWrongAnswers,
     getLevelProgress,
     setLevelProgress,
+    exportState,
+    importState,
     reset
   }
 })
-

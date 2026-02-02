@@ -54,6 +54,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useMicroLearningStore } from '@/stores/microLearning'
 import { useChatStore } from '@/stores/chat'
 import { useRoute } from 'vue-router'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const emit = defineEmits<{
   complete: []
@@ -74,6 +75,14 @@ const timeOptions = [5, 10, 15]
 const agentId = route.params.agentId as string
 
 onMounted(() => {
+  const storedLesson = microLearningStore.currentLesson
+  if (storedLesson && !storedLesson.completed) {
+    lessonContent.value = storedLesson.content
+    currentTopic.value = storedLesson.topic
+    timeMinutes.value = storedLesson.timeMinutes
+    return
+  }
+
   // Auto-start lesson if not already loaded
   if (!lessonContent.value && microLearningStore.conversationId) {
     requestLesson(timePerDay.value)
@@ -114,6 +123,19 @@ function requestLesson(minutes: number) {
       isLoading.value = false
       lessonContent.value = 'Error generating lesson. Please try again.'
     })
+}
+
+function persistCurrentLesson(content: string) {
+  const existing = microLearningStore.currentLesson
+  const lessonId = existing?.id || Date.now().toString()
+  microLearningStore.setCurrentLesson({
+    id: lessonId,
+    topic: currentTopic.value,
+    content,
+    timeMinutes: timeMinutes.value,
+    difficulty: existing?.difficulty || 'medium',
+    completed: false
+  })
 }
 
 async function pollForLesson(maxAttempts = 30) {
@@ -184,6 +206,7 @@ async function pollForLesson(maxAttempts = 30) {
                 attempt: attempt + 1
               })
               lessonContent.value = content
+              persistCurrentLesson(content)
               isLoading.value = false
               return
             }
@@ -201,6 +224,7 @@ async function pollForLesson(maxAttempts = 30) {
                 preview: longestMessage.content.substring(0, 150)
               })
               lessonContent.value = longestMessage.content
+              persistCurrentLesson(longestMessage.content)
               isLoading.value = false
               return
             }
@@ -236,6 +260,7 @@ async function pollForLesson(maxAttempts = 30) {
           preview: longestMessage.content.substring(0, 150)
         })
         lessonContent.value = longestMessage.content
+        persistCurrentLesson(longestMessage.content)
         isLoading.value = false
         return
       }
@@ -508,7 +533,7 @@ const formattedContent = computed(() => {
     return open + processed + close
   })
   
-  return formatted
+  return sanitizeHtml(formatted)
 })
 
 function handleRequestQuiz() {
@@ -529,6 +554,7 @@ function handleComplete() {
   
   microLearningStore.addLesson(lesson)
   microLearningStore.completeLesson(lesson.id)
+  microLearningStore.setCurrentLesson(null)
   
   emit('complete')
 }

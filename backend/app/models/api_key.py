@@ -23,6 +23,8 @@ class ApiKey(Base):
     # Rate limiting and usage tracking
     rate_limit_per_minute = Column(Integer, default=60, nullable=False)  # Requests per minute
     total_requests = Column(Integer, default=0, nullable=False)  # Total requests made
+    rate_limit_window_start = Column(DateTime, nullable=True)  # Start of current rate limit window (UTC)
+    rate_limit_window_count = Column(Integer, default=0, nullable=False)  # Requests in current window
     
     # Domain whitelisting (null or empty list = allow all origins)
     allowed_origins = Column(JSON, nullable=True)  # List of allowed origins, e.g., ["https://example.com", "https://app.example.com"]
@@ -37,9 +39,10 @@ class ApiKey(Base):
         if not self.allowed_origins or len(self.allowed_origins) == 0:
             return True
         
-        # If no origin header is provided, reject (for security)
+        # If no origin header is provided, allow server-to-server usage.
+        # Browser requests will generally include Origin/Referer.
         if not origin:
-            return False
+            return True
         
         # Normalize origin (remove trailing slash, convert to lowercase for comparison)
         normalized_origin = origin.rstrip('/').lower()

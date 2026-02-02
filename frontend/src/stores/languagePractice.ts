@@ -175,6 +175,14 @@ export const useLanguagePracticeStore = defineStore('languagePractice', () => {
     learningGoals.value = goals
   }
 
+  function setProficiencyLevel(level: ProficiencyLevel, cefrLevel: string | null) {
+    languageProfile.value = {
+      ...languageProfile.value,
+      proficiencyLevel: level,
+      cefrLevel
+    }
+  }
+
   function addVocabularyCard(card: VocabularyCard) {
     vocabularyCards.value.push(card)
   }
@@ -277,6 +285,39 @@ export const useLanguagePracticeStore = defineStore('languagePractice', () => {
     activeConversation.value = null
   }
 
+  function exportState() {
+    return JSON.parse(JSON.stringify({
+      currentStep: currentStep.value,
+      languageProfile: languageProfile.value,
+      learningGoals: learningGoals.value,
+      vocabularyCards: vocabularyCards.value,
+      grammarExercises: grammarExercises.value,
+      conversationScenarios: conversationScenarios.value,
+      pronunciationExercises: pronunciationExercises.value,
+      progressStats: progressStats.value,
+      conversationId: conversationId.value,
+      currentVocabularySet: currentVocabularySet.value,
+      currentGrammarTopic: currentGrammarTopic.value,
+      activeConversation: activeConversation.value,
+    }))
+  }
+
+  function importState(state: any) {
+    if (!state || typeof state !== 'object') return
+    if (state.currentStep) currentStep.value = state.currentStep
+    if (state.languageProfile) languageProfile.value = state.languageProfile
+    if (state.learningGoals) learningGoals.value = state.learningGoals
+    if (state.vocabularyCards) vocabularyCards.value = state.vocabularyCards
+    if (state.grammarExercises) grammarExercises.value = state.grammarExercises
+    if (state.conversationScenarios) conversationScenarios.value = state.conversationScenarios
+    if (state.pronunciationExercises) pronunciationExercises.value = state.pronunciationExercises
+    if (state.progressStats) progressStats.value = state.progressStats
+    if (state.conversationId !== undefined) conversationId.value = state.conversationId
+    if (state.currentVocabularySet) currentVocabularySet.value = state.currentVocabularySet
+    if (state.currentGrammarTopic !== undefined) currentGrammarTopic.value = state.currentGrammarTopic
+    if (state.activeConversation !== undefined) activeConversation.value = state.activeConversation
+  }
+
   return {
     // State
     currentStep,
@@ -295,6 +336,7 @@ export const useLanguagePracticeStore = defineStore('languagePractice', () => {
     setStep,
     setLanguageProfile,
     setLearningGoals,
+    setProficiencyLevel,
     addVocabularyCard,
     updateVocabularyCard,
     addGrammarExercise,
@@ -307,6 +349,8 @@ export const useLanguagePracticeStore = defineStore('languagePractice', () => {
     setCurrentVocabularySet,
     setCurrentGrammarTopic,
     setActiveConversation,
+    exportState,
+    importState,
     reset
   }
 })

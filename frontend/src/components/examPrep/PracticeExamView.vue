@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useExamPrepStore } from '@/stores/examPrep'
 import { useChatStore } from '@/stores/chat'
 import { useRoute } from 'vue-router'
@@ -112,6 +112,40 @@ interface ExamQuestion {
   explanation: string
   points: number
 }
+
+onMounted(() => {
+  const storedExam = examPrepStore.currentPracticeExam
+  if (storedExam && storedExam.questions && storedExam.questions.length > 0 && !storedExam.completedAt) {
+    currentExam.value = storedExam
+    answers.value = { ...(storedExam.answers || {}) }
+
+    if (storedExam.startedAt) {
+      const startedAt = new Date(storedExam.startedAt).getTime()
+      const limitSeconds = (storedExam.timeLimit || 60) * 60
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+      const remaining = Math.max(0, limitSeconds - elapsed)
+      timeRemaining.value = remaining
+      if (remaining > 0) {
+        startTimer()
+      } else {
+        submitExam()
+      }
+    }
+  }
+})
+
+watch(
+  answers,
+  (nextAnswers) => {
+    if (examPrepStore.currentPracticeExam) {
+      examPrepStore.setCurrentPracticeExam({
+        ...examPrepStore.currentPracticeExam,
+        answers: { ...nextAnswers }
+      })
+    }
+  },
+  { deep: true }
+)
 
 async function generateExam() {
   isGenerating.value = true
@@ -299,6 +333,19 @@ async function pollForExam(maxAttempts = 12) {
               questions.forEach(q => {
                 answers.value[q.id] = ''
               })
+
+              examPrepStore.setCurrentPracticeExam({
+                id: `exam-${Date.now()}`,
+                examType: info.examType || 'General',
+                subject: info.subject || 'General',
+                numQuestions: questions.length,
+                timeLimit: 60,
+                questions: questions,
+                startedAt: new Date(),
+                completedAt: null,
+                score: null,
+                answers: { ...answers.value }
+              })
               
               // Start timer
               timeRemaining.value = 60 * 60 // seconds
@@ -348,6 +395,19 @@ async function pollForExam(maxAttempts = 12) {
                 questions.forEach(q => {
                   answers.value[q.id] = ''
                 })
+
+                examPrepStore.setCurrentPracticeExam({
+                  id: `exam-${Date.now()}`,
+                  examType: info.examType || 'General',
+                  subject: info.subject || 'General',
+                  numQuestions: questions.length,
+                  timeLimit: 60,
+                  questions: questions,
+                  startedAt: new Date(),
+                  completedAt: null,
+                  score: null,
+                  answers: { ...answers.value }
+                })
                 
                 timeRemaining.value = 60 * 60
                 startTimer()
@@ -394,6 +454,19 @@ async function pollForExam(maxAttempts = 12) {
                 
                 questions.forEach(q => {
                   answers.value[q.id] = ''
+                })
+
+                examPrepStore.setCurrentPracticeExam({
+                  id: `exam-${Date.now()}`,
+                  examType: info.examType || 'General',
+                  subject: info.subject || 'General',
+                  numQuestions: questions.length,
+                  timeLimit: 60,
+                  questions: questions,
+                  startedAt: new Date(),
+                  completedAt: null,
+                  score: null,
+                  answers: { ...answers.value }
                 })
                 
                 timeRemaining.value = 60 * 60
@@ -471,6 +544,19 @@ async function pollForExam(maxAttempts = 12) {
           
           questions.forEach(q => {
             answers.value[q.id] = ''
+          })
+
+          examPrepStore.setCurrentPracticeExam({
+            id: `exam-${Date.now()}`,
+            examType: info.examType || 'General',
+            subject: info.subject || 'General',
+            numQuestions: questions.length,
+            timeLimit: 60,
+            questions: questions,
+            startedAt: new Date(),
+            completedAt: null,
+            score: null,
+            answers: { ...answers.value }
           })
           
           timeRemaining.value = 60 * 60
@@ -571,6 +657,15 @@ function submitExam(event?: Event) {
         examType: currentExam.value.examType || 'General',
         subject: currentExam.value.subject || 'General'
       })
+
+      if (examPrepStore.currentPracticeExam) {
+        examPrepStore.setCurrentPracticeExam({
+          ...examPrepStore.currentPracticeExam,
+          completedAt: new Date(),
+          score,
+          answers: { ...answers.value }
+        })
+      }
       
       // Mark that we just submitted an exam (for auto-triggering weak area analysis)
       examPrepStore.setJustSubmittedExam(true)

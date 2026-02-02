@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.core.database import get_db
@@ -17,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/{agent_id}", response_model=ChatResponse)
-async def chat(
+def chat(
     agent_id: UUID,
     chat_request: ChatRequest,
     current_user: User = Depends(get_current_user),
@@ -25,15 +24,13 @@ async def chat(
 ):
     """Send a message to an agent and get a response."""
     # Verify agent ownership or prebuilt access
-    agent = await run_in_threadpool(
-        lambda: db.query(Agent).filter(
-            Agent.id == agent_id,
-            (
-                (Agent.user_id == current_user.id)
-                | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
-            ),
-        ).first()
-    )
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        (
+            (Agent.user_id == current_user.id)
+            | (Agent.is_prebuilt.is_(True) & Agent.is_active.is_(True))
+        ),
+    ).first()
     
     if not agent:
         raise HTTPException(
@@ -44,13 +41,11 @@ async def chat(
     # Get or create conversation
     conversation = None
     if chat_request.conversation_id:
-        conversation = await run_in_threadpool(
-            lambda: db.query(Conversation).filter(
-                Conversation.id == chat_request.conversation_id,
-                Conversation.user_id == current_user.id,
-                Conversation.agent_id == agent_id
-            ).first()
-        )
+        conversation = db.query(Conversation).filter(
+            Conversation.id == chat_request.conversation_id,
+            Conversation.user_id == current_user.id,
+            Conversation.agent_id == agent_id
+        ).first()
         
         if not conversation:
             raise HTTPException(
@@ -59,58 +54,45 @@ async def chat(
             )
     else:
         # Create new conversation
-        def _create_conversation():
-            conv = Conversation(
-                agent_id=agent_id,
-                user_id=current_user.id,
-                title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
-            )
-            db.add(conv)
-            db.commit()
-            db.refresh(conv)
-            return conv
-
-        conversation = await run_in_threadpool(_create_conversation)
+        conversation = Conversation(
+            agent_id=agent_id,
+            user_id=current_user.id,
+            title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
         
         # If agent has a greeting message, add it to the conversation
         if agent.greeting_message:
-            def _add_greeting():
-                greeting_message = Message(
-                    conversation_id=conversation.id,
-                    role=MessageRole.ASSISTANT,
-                    content=agent.greeting_message,
-                )
-                db.add(greeting_message)
-                db.commit()
-
-            await run_in_threadpool(_add_greeting)
+            greeting_message = Message(
+                conversation_id=conversation.id,
+                role=MessageRole.ASSISTANT,
+                content=agent.greeting_message,
+            )
+            db.add(greeting_message)
+            db.commit()
     
     # Get recent message history BEFORE saving current message (last 10 messages for context and performance)
-    def _load_recent_messages():
-        return (
-            db.query(Message)
-            .filter(Message.conversation_id == conversation.id)
-            .order_by(Message.created_at.desc())
-            .limit(10)
-            .all()
-        )
-
-    recent_messages = await run_in_threadpool(_load_recent_messages)
+    recent_messages = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+        .all()
+    )
 
     # Reverse to get chronological order
     recent_messages.reverse()
 
     # Save user message AFTER getting history
-    def _save_user_message():
-        user_message = Message(
-            conversation_id=conversation.id,
-            role=MessageRole.USER,
-            content=chat_request.message,
-        )
-        db.add(user_message)
-        db.commit()
-
-    await run_in_threadpool(_save_user_message)
+    user_message = Message(
+        conversation_id=conversation.id,
+        role=MessageRole.USER,
+        content=chat_request.message,
+    )
+    db.add(user_message)
+    db.commit()
 
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -144,25 +126,19 @@ async def chat(
         )
 
     # Save assistant message
-    def _save_assistant_message():
-        assistant_message = Message(
-            conversation_id=conversation.id,
-            role=MessageRole.ASSISTANT,
-            content=assistant_response,
-        )
-        db.add(assistant_message)
-        db.commit()
-
-    await run_in_threadpool(_save_assistant_message)
+    assistant_message = Message(
+        conversation_id=conversation.id,
+        role=MessageRole.ASSISTANT,
+        content=assistant_response,
+    )
+    db.add(assistant_message)
+    db.commit()
 
     # Update conversation updated_at
     from datetime import datetime
 
-    def _update_conversation_timestamp():
-        conversation.updated_at = datetime.utcnow()
-        db.commit()
-
-    await run_in_threadpool(_update_conversation_timestamp)
+    conversation.updated_at = datetime.utcnow()
+    db.commit()
 
     return ChatResponse(
         conversation_id=conversation.id,
@@ -271,4 +247,3 @@ Be encouraging but honest. Provide specific, actionable feedback."""
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error assessing pronunciation: {str(e)}",
         )
-

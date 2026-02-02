@@ -239,11 +239,12 @@ IMPORTANT:
 - Make sure the correct answers are accurate`
 
     // Get or create conversation
-    let conversationId = chatStore.activeConversationId
+    let conversationId = languagePracticeStore.conversationId || chatStore.activeConversationId
     if (!conversationId) {
       const result = await chatStore.createConversation(agentId)
       if (result.success && result.conversation) {
         conversationId = result.conversation.id
+        languagePracticeStore.setConversationId(conversationId)
       }
     }
 
@@ -443,11 +444,12 @@ Provide assessment in this JSON format:
   "description": "Brief description of the level"
 }`
 
-      let conversationId = chatStore.activeConversationId
+      let conversationId = languagePracticeStore.conversationId || chatStore.activeConversationId
       if (!conversationId) {
         const result = await chatStore.createConversation(agentId)
         if (result.success && result.conversation) {
           conversationId = result.conversation.id
+          languagePracticeStore.setConversationId(conversationId)
         }
       }
 
@@ -809,5 +811,4 @@ h2 {
   vertical-align: middle;
 }
 </style>
-
 

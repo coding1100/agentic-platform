@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import auth, agents, conversations, chat, api_keys, public
+from app.api.v1 import auth, agents, conversations, chat, api_keys, public, state
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.prebuilt_agents import seed_prebuilt_agents
@@ -44,6 +44,7 @@ app.include_router(conversations.router, prefix="/api/v1/conversations", tags=["
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["api-keys"])
 app.include_router(public.router, prefix="/api/v1/public", tags=["public"])
+app.include_router(state.router, prefix="/api/v1/state", tags=["state"])
 
 # Import and include streaming router
 from app.api.v1 import chat_stream
@@ -53,6 +54,9 @@ app.include_router(chat_stream.router, prefix="/api/v1/chat", tags=["chat"])
 @app.on_event("startup")
 def startup_seed_prebuilt_agents() -> None:
     """Seed prebuilt agents on application startup."""
+    if settings.ENV.lower() == "production" and settings.SECRET_KEY.startswith("your-secret-key"):
+        raise RuntimeError("SECRET_KEY must be set to a secure value in production.")
+
     db = SessionLocal()
     try:
         seed_prebuilt_agents(db)

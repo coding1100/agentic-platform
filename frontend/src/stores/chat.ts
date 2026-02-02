@@ -75,7 +75,7 @@ export const useChatStore = defineStore('chat', () => {
       })
 
       // Refetch the conversation to get all messages including greeting if it's a new conversation
-      await fetchConversation(response.conversation_id)
+      await fetchConversation(response.conversation_id, true)
 
       activeConversationId.value = response.conversation_id
 
@@ -105,4 +105,3 @@ export const useChatStore = defineStore('chat', () => {
     clearMessages
   }
 })
-

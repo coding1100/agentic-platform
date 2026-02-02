@@ -78,6 +78,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCourseCreationStore } from '@/stores/courseCreation'
 import { useChatStore } from '@/stores/chat'
+import { usePersistedStore } from '@/composables/usePersistedStore'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 // @ts-ignore - html2pdf.js doesn't have TypeScript definitions
 import html2pdf from 'html2pdf.js'
 
@@ -87,6 +89,15 @@ const authStore = useAuthStore()
 const courseCreationStore = useCourseCreationStore()
 const chatStore = useChatStore()
 
+const agentId = route.params.agentId as string
+
+const { ready: courseCreationReady } = usePersistedStore(
+  `courseCreation:${agentId}`,
+  () => courseCreationStore.exportState(),
+  (data) => courseCreationStore.importState(data),
+  () => courseCreationStore.$state
+)
+
 const loading = ref(false)
 const syllabusContent = computed(() => courseCreationStore.generatedSyllabus)
 const courseOverview = computed(() => courseCreationStore.courseOverview)
@@ -94,6 +105,7 @@ const courseModules = computed(() => courseCreationStore.courseModules)
 const assessmentDesign = computed(() => courseCreationStore.assessmentDesign)
 
 onMounted(async () => {
+  await courseCreationReady
   console.log('CourseSyllabus mounted, syllabusContent:', syllabusContent.value)
   console.log('Route query:', route.query)
   
@@ -192,7 +204,8 @@ function formatSyllabus(content: string): string {
     .filter(s => s.length > 0)
     .join('')
   
-  return formatted || '<p>' + content.replace(/\n/g, '<br>') + '</p>'
+  const safe = formatted || '<p>' + content.replace(/\n/g, '<br>') + '</p>'
+  return sanitizeHtml(safe)
 }
 
 async function downloadPDF() {

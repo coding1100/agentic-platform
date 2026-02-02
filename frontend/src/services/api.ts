@@ -10,7 +10,11 @@ import type {
   ApiKeyUsageStats
 } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009'
+const defaultBaseUrl =
+  import.meta.env.DEV
+    ? 'http://localhost:8009'
+    : (typeof window !== 'undefined' ? window.location.origin : '')
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultBaseUrl
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -206,4 +210,20 @@ export const apiKeysApi = {
   }
 }
 
+export interface UserStateResponse {
+  namespace: string
+  data: Record<string, any>
+  updated_at?: string | null
+}
 
+export const stateApi = {
+  async get(namespace: string): Promise<UserStateResponse> {
+    const response = await apiClient.get(`/api/v1/state/${encodeURIComponent(namespace)}`)
+    return response.data
+  },
+
+  async save(namespace: string, data: Record<string, any>): Promise<UserStateResponse> {
+    const response = await apiClient.put(`/api/v1/state/${encodeURIComponent(namespace)}`, { data })
+    return response.data
+  }
+}

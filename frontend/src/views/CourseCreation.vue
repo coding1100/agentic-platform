@@ -214,6 +214,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { useChatStore } from '@/stores/chat'
 import { useCourseCreationStore } from '@/stores/courseCreation'
+import { usePersistedStore } from '@/composables/usePersistedStore'
 import CourseOverviewForm from '@/components/courseCreation/CourseOverviewForm.vue'
 import CourseStructureForm from '@/components/courseCreation/CourseStructureForm.vue'
 import AssessmentDesignForm from '@/components/courseCreation/AssessmentDesignForm.vue'
@@ -221,6 +222,7 @@ import ConceptMappingForm from '@/components/courseCreation/ConceptMappingForm.v
 import WorkflowAutomationForm from '@/components/courseCreation/WorkflowAutomationForm.vue'
 import ValidationReviewForm from '@/components/courseCreation/ValidationReviewForm.vue'
 import FinalReviewForm from '@/components/courseCreation/FinalReviewForm.vue'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -239,6 +241,13 @@ const isGeneratingSyllabus = ref(false)
 const agent = computed(() => agentsStore.selectedAgent)
 const messages = computed(() => chatStore.messages)
 const isLoading = computed(() => chatStore.sending || chatStore.loading)
+
+const { ready: courseCreationReady } = usePersistedStore(
+  `courseCreation:${agentId}`,
+  () => courseCreationStore.exportState(),
+  (data) => courseCreationStore.importState(data),
+  () => courseCreationStore.$state
+)
 
 // AI Suggestions based on current step
 const aiSuggestions = computed(() => {
@@ -330,13 +339,20 @@ function isStepCompleted(stepId: string): boolean {
 }
 
 onMounted(async () => {
+  await courseCreationReady
   await agentsStore.fetchAgent(agentId)
   
   // Initialize conversation
-  const conversationId = route.query.conversation_id as string
+  const conversationId = (route.query.conversation_id as string) || courseCreationStore.conversationId
   if (conversationId) {
     await chatStore.fetchConversation(conversationId)
     courseCreationStore.setConversationId(conversationId)
+    if (!route.query.conversation_id) {
+      router.replace({
+        path: route.path,
+        query: { ...route.query, conversation_id: conversationId }
+      })
+    }
   } else {
     const result = await chatStore.createConversation(agentId)
     if (result.success && result.conversation) {
@@ -386,10 +402,11 @@ function formatTime(dateString: string) {
 }
 
 function formatMessage(content: string): string {
-  return content
+  const formatted = content
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
+  return sanitizeHtml(formatted)
 }
 
 function handleCourseOverviewComplete(overview: any) {
@@ -1205,4 +1222,3 @@ h1 {
   }
 }
 </style>
-

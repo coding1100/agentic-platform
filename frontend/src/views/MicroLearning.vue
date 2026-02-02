@@ -57,12 +57,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { useChatStore } from '@/stores/chat'
 import { useMicroLearningStore } from '@/stores/microLearning'
+import { usePersistedStore } from '@/composables/usePersistedStore'
 import OnboardingFlow from '@/components/microLearning/OnboardingFlow.vue'
 import ProgressDashboard from '@/components/microLearning/ProgressDashboard.vue'
 import DailyLesson from '@/components/microLearning/DailyLesson.vue'
@@ -80,14 +81,22 @@ const microLearningStore = useMicroLearningStore()
 const agentId = route.params.agentId as string
 const agent = computed(() => agentsStore.selectedAgent)
 
+const { ready: microLearningReady } = usePersistedStore(
+  `microLearning:${agentId}`,
+  () => microLearningStore.exportState(),
+  (data) => microLearningStore.importState(data),
+  () => microLearningStore.$state
+)
+
 onMounted(async () => {
+  await microLearningReady
   await agentsStore.fetchAgent(agentId)
   
-  // Check if onboarding is complete
-  if (microLearningStore.isOnboardingComplete) {
-    microLearningStore.setCurrentStep('dashboard')
-  } else {
+  // Respect persisted step unless onboarding is incomplete or still on onboarding
+  if (!microLearningStore.isOnboardingComplete) {
     microLearningStore.setCurrentStep('onboarding')
+  } else if (microLearningStore.currentStep === 'onboarding') {
+    microLearningStore.setCurrentStep('dashboard')
   }
 
   // Load or create conversation
@@ -99,8 +108,8 @@ onMounted(async () => {
 async function initializeConversation() {
   try {
     const result = await chatStore.createConversation(agentId, 'Micro-Learning Session')
-    if (result.success && result.conversationId) {
-      microLearningStore.setConversationId(result.conversationId)
+    if (result.success && result.conversation) {
+      microLearningStore.setConversationId(result.conversation.id)
     }
   } catch (error) {
     console.error('Error initializing conversation:', error)
@@ -145,7 +154,7 @@ function handleReviewComplete() {
 }
 
 function goBack() {
-  router.push('/agents')
+  router.push('/dashboard')
 }
 
 function handleLogout() {

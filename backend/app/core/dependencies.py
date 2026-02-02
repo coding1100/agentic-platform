@@ -2,18 +2,20 @@ from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 from app.core.database import get_db
 from app.core.security import decode_access_token, verify_api_key
 from app.models.user import User
 from app.models.api_key import ApiKey
+from app.models.api_key_usage_daily import ApiKeyUsageDaily
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """Get current authenticated user from JWT token."""
@@ -22,6 +24,12 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # Allow token via Authorization header or access_token cookie
+    if not token:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise credentials_exception
 
     payload = decode_access_token(token)
     if payload is None:
@@ -127,7 +135,7 @@ async def get_api_key_user(
             detail="Invalid API key",
         )
 
-    # Validate domain whitelisting
+    # Validate domain whitelisting (allows server-to-server when origin is missing)
     if not matching_key.is_origin_allowed(request_origin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -137,9 +145,39 @@ async def get_api_key_user(
             ),
         )
 
-    # Update last used timestamp
+    # Enforce per-key rate limits (simple fixed window)
+    window_start = matching_key.rate_limit_window_start
+    if not window_start or now - window_start >= timedelta(minutes=1):
+        matching_key.rate_limit_window_start = now
+        matching_key.rate_limit_window_count = 1
+    else:
+        if matching_key.rate_limit_window_count >= matching_key.rate_limit_per_minute:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="API key rate limit exceeded. Please slow down.",
+            )
+        matching_key.rate_limit_window_count += 1
+
+    # Update last used timestamp and aggregate usage
     matching_key.last_used_at = now
     matching_key.total_requests += 1
+
+    # Update daily usage stats
+    usage_date = now.date()
+    usage = db.query(ApiKeyUsageDaily).filter(
+        ApiKeyUsageDaily.api_key_id == matching_key.id,
+        ApiKeyUsageDaily.usage_date == usage_date,
+    ).first()
+    if usage:
+        usage.request_count += 1
+    else:
+        usage = ApiKeyUsageDaily(
+            api_key_id=matching_key.id,
+            usage_date=usage_date,
+            request_count=1,
+        )
+        db.add(usage)
+
     db.commit()
 
     # Get user

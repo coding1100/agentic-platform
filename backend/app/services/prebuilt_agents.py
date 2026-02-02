@@ -1,6 +1,7 @@
 from typing import List
 from sqlalchemy.orm import Session
 from app.core.security import get_password_hash
+import secrets
 from app.models.user import User
 from app.models.agent import Agent
 from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
@@ -11,11 +12,19 @@ def _get_or_create_system_user(db: Session) -> User:
   system_email = "system@agentic.local"
   user = db.query(User).filter(User.email == system_email).first()
   if user:
+    # Ensure system flag is set
+    if not getattr(user, "is_system", False):
+      user.is_system = True
+      db.commit()
+      db.refresh(user)
     return user
 
+  # Use a random password and mark as system user to prevent login.
+  random_password = secrets.token_urlsafe(48)
   user = User(
     email=system_email,
-    password_hash=get_password_hash("system-not-for-login"),
+    password_hash=get_password_hash(random_password),
+    is_system=True,
   )
   db.add(user)
   db.commit()
@@ -505,5 +514,4 @@ def seed_prebuilt_agents(db: Session) -> None:
     db.add(agent)
 
   db.commit()
-
 

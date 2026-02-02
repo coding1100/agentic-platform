@@ -401,11 +401,13 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiKeysStore } from '@/stores/apiKeys'
 import { useAgentsStore } from '@/stores/agents'
+import { useAuthStore } from '@/stores/auth'
 import type { ApiKey, ApiKeyUsageStats, Agent } from '@/types'
 
 const router = useRouter()
 const apiKeysStore = useApiKeysStore()
 const agentsStore = useAgentsStore()
+const authStore = useAuthStore()
 
 const showCreateModal = ref(false)
 const newlyCreatedKey = ref<ApiKey | null>(null)
@@ -435,7 +437,8 @@ const editForm = ref({
 const editOriginInput = ref('')
 
 const availableAgents = computed(() => {
-  return agentsStore.agents.filter(agent => agent.is_prebuilt || agent.user_id === agentsStore.agents[0]?.user_id)
+  const userId = authStore.currentUser?.id
+  return agentsStore.agents.filter(agent => agent.is_prebuilt || agent.user_id === userId)
 })
 
 const selectedAgentForUrl = computed(() => {
@@ -463,7 +466,9 @@ function getAgentName(agentId: string | null): string {
 }
 
 function getApiUrl(agentSlug: string): string {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009'
+  const baseUrl =
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.DEV ? 'http://localhost:8009' : window.location.origin)
   return `${baseUrl}/api/v1/public/agents/${agentSlug}/chat`
 }
 

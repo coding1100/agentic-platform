@@ -87,6 +87,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { useChatStore } from '@/stores/chat'
 import { useExamPrepStore } from '@/stores/examPrep'
+import { usePersistedStore } from '@/composables/usePersistedStore'
 import ExamSetupForm from '@/components/examPrep/ExamSetupForm.vue'
 import StudyScheduleView from '@/components/examPrep/StudyScheduleView.vue'
 import PracticeExamView from '@/components/examPrep/PracticeExamView.vue'
@@ -104,6 +105,13 @@ const selectedTopic = ref('')
 
 const agentId = route.params.agentId as string
 const agent = computed(() => agentsStore.selectedAgent)
+
+const { ready: examPrepReady } = usePersistedStore(
+  `examPrep:${agentId}`,
+  () => examPrepStore.exportState(),
+  (data) => examPrepStore.importState(data),
+  () => examPrepStore.$state
+)
 
 const steps = [
   { id: 'exam-setup', label: 'Setup' },
@@ -143,13 +151,14 @@ function formatDate(dateString: string | null): string {
 }
 
 onMounted(async () => {
+  await examPrepReady
   await agentsStore.fetchAgent(agentId)
   
   // Initialize conversation if needed
   if (!examPrepStore.conversationId) {
     const result = await chatStore.createConversation(agentId, 'Exam Prep Session')
-    if (result.success && result.conversationId) {
-      examPrepStore.setConversationId(result.conversationId)
+    if (result.success && result.conversation) {
+      examPrepStore.setConversationId(result.conversation.id)
     }
   }
 

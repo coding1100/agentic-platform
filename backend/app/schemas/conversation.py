@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
@@ -17,7 +17,7 @@ class ConversationResponse(BaseModel):
     title: Optional[str]
     created_at: datetime
     updated_at: datetime
-    messages: List[MessageResponse] = []
+    messages: List[MessageResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

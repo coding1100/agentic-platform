@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from uuid import UUID
 from typing import List
 from datetime import datetime, timedelta
@@ -8,6 +9,7 @@ from app.core.dependencies import get_current_user
 from app.core.security import generate_api_key, hash_api_key
 from app.models.user import User
 from app.models.api_key import ApiKey
+from app.models.api_key_usage_daily import ApiKeyUsageDaily
 from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyUsageStats, ApiKeyUpdate
 
 router = APIRouter()
@@ -213,14 +215,21 @@ async def get_api_key_usage(
             detail="API key not found"
         )
     
-    # Calculate requests today and this month
+    # Calculate requests today and this month from daily usage table
     today = datetime.utcnow().date()
     month_start = datetime.utcnow().replace(day=1).date()
-    
-    # For now, we'll use total_requests as a proxy
-    # In a production system, you'd want to track requests in a separate table
-    requests_today = 0  # TODO: Implement proper tracking
-    requests_this_month = api_key.total_requests  # TODO: Implement proper tracking
+
+    today_usage = db.query(ApiKeyUsageDaily).filter(
+        ApiKeyUsageDaily.api_key_id == api_key.id,
+        ApiKeyUsageDaily.usage_date == today,
+    ).first()
+    requests_today = today_usage.request_count if today_usage else 0
+
+    requests_this_month = db.query(func.coalesce(func.sum(ApiKeyUsageDaily.request_count), 0)).filter(
+        ApiKeyUsageDaily.api_key_id == api_key.id,
+        ApiKeyUsageDaily.usage_date >= month_start,
+        ApiKeyUsageDaily.usage_date <= today,
+    ).scalar() or 0
     
     return ApiKeyUsageStats(
         total_requests=api_key.total_requests,

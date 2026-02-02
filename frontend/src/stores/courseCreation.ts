@@ -199,6 +199,35 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     generatedSyllabus.value = null
   }
 
+  function exportState() {
+    return JSON.parse(JSON.stringify({
+      currentStep: currentStep.value,
+      courseOverview: courseOverview.value,
+      courseModules: courseModules.value,
+      assessmentDesign: assessmentDesign.value,
+      conceptMap: conceptMap.value,
+      workflowAutomation: workflowAutomation.value,
+      validationResult: validationResult.value,
+      meetingNotes: meetingNotes.value,
+      conversationId: conversationId.value,
+      generatedSyllabus: generatedSyllabus.value,
+    }))
+  }
+
+  function importState(state: any) {
+    if (!state || typeof state !== 'object') return
+    if (state.currentStep) currentStep.value = state.currentStep
+    if (state.courseOverview) courseOverview.value = state.courseOverview
+    if (state.courseModules) courseModules.value = state.courseModules
+    if (state.assessmentDesign) assessmentDesign.value = state.assessmentDesign
+    if (state.conceptMap !== undefined) conceptMap.value = state.conceptMap
+    if (state.workflowAutomation) workflowAutomation.value = state.workflowAutomation
+    if (state.validationResult !== undefined) validationResult.value = state.validationResult
+    if (state.meetingNotes !== undefined) meetingNotes.value = state.meetingNotes
+    if (state.conversationId !== undefined) conversationId.value = state.conversationId
+    if (state.generatedSyllabus !== undefined) generatedSyllabus.value = state.generatedSyllabus
+  }
+
   return {
     // State
     currentStep,
@@ -224,6 +253,8 @@ export const useCourseCreationStore = defineStore('courseCreation', () => {
     setMeetingNotes,
     setConversationId,
     setGeneratedSyllabus,
+    exportState,
+    importState,
     reset
   }
 })

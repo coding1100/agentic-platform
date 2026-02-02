@@ -3,6 +3,8 @@ from typing import List
 
 
 class Settings(BaseSettings):
+    # Environment
+    ENV: str = "development"
     # Database
     # For Docker: use postgres:5432 (service name from docker-compose.yml)
     # For local dev: use localhost:5435 (if using docker-compose.yml with port mapping)
