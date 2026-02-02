@@ -35,7 +35,7 @@
           </p>
         </div>
 
-        <div class="syllabus-body" v-html="formatSyllabus(syllabusContent)"></div>
+        <div class="syllabus-body" v-html="formatSyllabus(syllabusContent)" v-if="syllabusContent"></div>
 
         <div class="syllabus-footer">
           <div class="course-structure-section" v-if="courseModules.length > 0">
@@ -141,21 +141,55 @@ function formatDifficulty(difficulty: string): string {
 }
 
 function formatSyllabus(content: string): string {
+  if (!content) return ''
+  
+  // Remove any quiz questions or random content that shouldn't be in a syllabus
+  // Look for patterns like "Question 1:", "**Question 1:**", etc.
+  const questionPattern = /(?:^|\n)(?:\*\*)?Question\s+\d+[:\-]?\s*\*\*/gi
+  if (questionPattern.test(content)) {
+    // If questions are found, try to extract only the syllabus part before questions
+    const questionIndex = content.search(/(?:^|\n)(?:\*\*)?Question\s+\d+[:\-]?\s*\*\*/i)
+    if (questionIndex > 0) {
+      content = content.substring(0, questionIndex).trim()
+    }
+  }
+  
   // Convert markdown-like formatting to HTML
   let formatted = content
+    // Headers (must be at start of line)
+    .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
+    .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+    .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+    .replace(/^####\s+(.+)$/gm, '<h4>$1</h4>')
+    // Bold and italic
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Lists (must be at start of line)
+    .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
   
   // Split by double newlines to create paragraphs
-  const paragraphs = formatted.split(/\n\n+/)
-  formatted = paragraphs
-    .map(p => {
-      const trimmed = p.trim()
+  const sections = formatted.split(/\n\n+/)
+  formatted = sections
+    .map(section => {
+      const trimmed = section.trim()
       if (!trimmed) return ''
+      
+      // If it's already a heading, return as is
+      if (trimmed.startsWith('<h')) {
+        return trimmed
+      }
+      
+      // Check if it contains list items
+      if (trimmed.includes('<li>')) {
+        return `<ul>${trimmed}</ul>`
+      }
+      
       // Replace single newlines with <br> within paragraphs
-      return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`
+      const withBreaks = trimmed.replace(/\n/g, '<br>')
+      return `<p>${withBreaks}</p>`
     })
-    .filter(p => p)
+    .filter(s => s.length > 0)
     .join('')
   
   return formatted || '<p>' + content.replace(/\n/g, '<br>') + '</p>'

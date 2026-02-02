@@ -436,49 +436,99 @@ async function handleFinalReviewComplete() {
     const validation = courseCreationStore.validationResult
 
     const summaryPrompt = `
-Using the following structured course design data, generate a final, exportable course syllabus.
+You are generating a professional, comprehensive course syllabus. Use ONLY the course data provided below. DO NOT generate random questions, quizzes, or unrelated content.
+
+CRITICAL INSTRUCTIONS:
+1. Generate ONLY a syllabus document - no questions, no quizzes, no interactive content
+2. Use EXACTLY the course data provided below
+3. Format as a clean, professional academic syllabus
+4. Include all modules and lessons exactly as provided
+5. Structure the assessment plan based on the assessment design data
+6. Write in a formal, academic tone suitable for course documentation
+
+COURSE DATA TO USE:
 
 COURSE OVERVIEW:
 - Title: ${overview.title}
 - Subject: ${overview.subject}
-- Duration (weeks): ${overview.duration}
-- Difficulty: ${overview.difficulty}
+- Duration: ${overview.duration} weeks
+- Difficulty Level: ${overview.difficulty}
 - Target Audience: ${overview.targetAudience}
 - Learning Objectives:
 ${overview.learningObjectives.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}
 
-COURSE MODULES:
+COURSE MODULES AND LESSONS:
 ${modules
   .map(
     (m, i) => `Module ${i + 1}: ${m.name}
-Description: ${m.description}
-Lessons:
+  Description: ${m.description}
+  Lessons in this module:
 ${m.lessons
   .map(
     (l, j) =>
-      `  ${j + 1}. ${l.title} (${l.duration}h) - Topics: ${l.topics.join(', ')}`
+      `    ${j + 1}. ${l.title} (Duration: ${l.duration} hours)
+       Topics Covered: ${l.topics.join(', ')}`
   )
   .join('\n')}`
   )
   .join('\n\n')}
 
 ASSESSMENT DESIGN:
-${JSON.stringify(assessments, null, 2)}
+${assessments.diagnostic ? '✓ Diagnostic Assessments: Included' : '✗ Diagnostic Assessments: Not included'}
+${assessments.formative ? '✓ Formative Assessments: Included' : '✗ Formative Assessments: Not included'}
+${assessments.summative ? '✓ Summative Assessments: Included' : '✗ Summative Assessments: Not included'}
+${assessments.comprehensive ? '✓ Comprehensive Assessments: Included' : '✗ Comprehensive Assessments: Not included'}
+${assessments.assessmentDetails && assessments.assessmentDetails.length > 0 ? `
+Assessment Details:
+${assessments.assessmentDetails.map((detail: any, idx: number) => `  ${idx + 1}. ${detail.type}: ${detail.questions} questions (${detail.weight}% of total grade)`).join('\n')}` : ''}
 
-CONCEPT MAP:
-${conceptMap ? JSON.stringify(conceptMap, null, 2) : 'Not provided'}
+${conceptMap ? `CONCEPT MAP:
+${JSON.stringify(conceptMap, null, 2)}` : ''}
 
-WORKFLOW AUTOMATION:
-${JSON.stringify(workflow, null, 2)}
+${workflow ? `WORKFLOW AUTOMATION:
+${JSON.stringify(workflow, null, 2)}` : ''}
 
-VALIDATION RESULT:
-${validation ? JSON.stringify(validation, null, 2) : 'Not provided'}
+${validation ? `VALIDATION NOTES:
+${JSON.stringify(validation, null, 2)}` : ''}
 
-Generate a clean, human-readable syllabus with:
-- A short course description
-- List of modules and lessons
-- Assessment plan
-- Any relevant notes for instructors.
+SYLLABUS FORMAT REQUIREMENTS:
+Generate a professional syllabus in the following structure:
+
+# COURSE SYLLABUS
+
+## Course Overview
+[Write a 2-3 paragraph description of the course, its purpose, and what students will learn. Use the title, subject, target audience, and learning objectives provided above.]
+
+## Course Information
+- **Course Title:** ${overview.title}
+- **Subject Area:** ${overview.subject}
+- **Duration:** ${overview.duration} weeks
+- **Difficulty Level:** ${overview.difficulty}
+- **Target Audience:** ${overview.targetAudience}
+
+## Learning Objectives
+${overview.learningObjectives.map((o, i) => `${i + 1}. ${o}`).join('\n')}
+
+## Course Structure
+[List ALL modules and lessons exactly as provided above. Format clearly with module numbers, names, descriptions, and all lessons with their topics.]
+
+## Assessment Plan
+[Describe the assessment strategy based on the assessment design data above. Explain what types of assessments will be used, their purpose, and weight distribution. Use the assessment details provided.]
+
+## Course Schedule
+[Provide a week-by-week breakdown showing which modules and lessons will be covered in each week, based on the ${overview.duration}-week duration.]
+
+## Additional Information
+[Include any relevant notes about prerequisites, materials needed, or instructor guidelines based on the validation and workflow data if provided.]
+
+---
+
+IMPORTANT: 
+- DO NOT include any quiz questions, multiple-choice questions, or assessment questions in the syllabus
+- DO NOT generate random content unrelated to the course data provided
+- DO NOT create example questions or practice problems
+- ONLY format and present the course information provided above in a professional syllabus format
+- The syllabus should be a DOCUMENT, not an interactive quiz or assessment
 `
 
     // Send message to agent and wait for response
