@@ -70,7 +70,7 @@
             <ul class="docs-notes">
               <li><strong>Universal Keys:</strong> Work with all agents. Create by leaving the agent selection as "All Agents" when creating a key.</li>
               <li><strong>Agent-Specific Keys:</strong> Work only with a specific agent. More secure but less flexible.</li>
-              <li><strong>Domain Whitelisting:</strong> Optional security feature. Restrict API key usage to specific domains (e.g., <code>https://yourdomain.com</code>). Leave empty to allow all domains.</li>
+              <li><strong>Domain Whitelisting:</strong> Optional security feature. Restrict API key usage to specific web origins (e.g., <code>https://yourdomain.com</code> — scheme + domain only, no ports/paths). Leave empty to allow all origins. Server-to-server calls are allowed even when no <code>Origin</code> header is present.</li>
             </ul>
 
             <h3>Getting Agent Information</h3>
@@ -660,7 +660,7 @@
               <li><strong>Security:</strong> Keep your API keys secure. They are shown only once when created. If lost, you'll need to create a new key.</li>
               <li><strong>Error Handling:</strong> The API returns standard HTTP status codes. Check the response status before processing the body.</li>
               <li><strong>Base URL:</strong> Make sure to use the correct base URL. For production: <code>https://agentic-platform.namatechnologlies.com</code>, for development: <code>http://localhost:8009</code></li>
-              <li><strong>Domain Whitelisting:</strong> If you've configured domain whitelisting for your API key, ensure requests include the <code>Origin</code> header matching your whitelisted domain.</li>
+              <li><strong>Domain Whitelisting:</strong> Whitelisting is enforced only when an <code>Origin</code> (or <code>Referer</code>) header is present. Browser calls include this automatically; server-to-server calls typically do not and are allowed. If you want strict origin enforcement, send a matching <code>Origin</code> header.</li>
               <li><strong>Quiz Generation:</strong> Quiz requests generate ALL questions in a single API call for efficiency. No need to make multiple requests.</li>
               <li><strong>Response Time:</strong> Agent responses typically take 2-10 seconds depending on complexity. Quiz generation may take 5-15 seconds for complete quizzes.</li>
             </ul>
