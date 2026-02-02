@@ -32,25 +32,14 @@ class LangchainAgentService:
   def _build_chain(self, agent: Agent) -> Any:
     """Build a simple chain for all agents."""
     llm = self._build_llm(agent)
-    system_instructions = agent.system_prompt or ""
-
-    # Simple prompt with chat history support.
-    # Always include system instructions to keep agent behavior consistent.
-    if system_instructions:
-      prompt = ChatPromptTemplate.from_messages(
-        [
-          ("system", system_instructions),
-          MessagesPlaceholder(variable_name="chat_history"),
-          ("human", "{input}"),
-        ]
-      )
-    else:
-      prompt = ChatPromptTemplate.from_messages(
-        [
-          MessagesPlaceholder(variable_name="chat_history"),
-          ("human", "{input}"),
-        ]
-      )
+    # Gemini chat history does not support system-role messages. Always use
+    # user/assistant history and inject system instructions into the input.
+    prompt = ChatPromptTemplate.from_messages(
+      [
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+      ]
+    )
     
     chain = prompt | llm
     return chain
@@ -513,6 +502,16 @@ class LangchainAgentService:
       else:
         current_input = latest_input
         history_for_chain = chat_history
+
+      # Defensive: ensure only Human/AI messages are passed to Gemini.
+      history_for_chain = [
+        msg for msg in history_for_chain
+        if isinstance(msg, (HumanMessage, AIMessage))
+      ]
+
+      # Inject system instructions into the current input to avoid system-role messages.
+      if agent.system_prompt:
+        current_input = f"{agent.system_prompt}\n\n{current_input}" if current_input else agent.system_prompt
       
       result = chain.invoke(
         {
