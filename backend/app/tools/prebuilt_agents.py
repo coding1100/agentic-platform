@@ -8,6 +8,7 @@ PREBUILT_AGENT_SLUGS = {
   "language_practice_agent": "education.language_practice_agent",
   "micro_learning_agent": "education.micro_learning_agent",
   "exam_prep_agent": "education.exam_prep_agent",
+  "resume_review_agent": "career.resume_review_agent",
 }
 
 
@@ -1672,6 +1673,156 @@ Generate the complete progress report now:"""
     return f"Error tracking progress: {str(e)}. Please try again."
 
 
+def _generate_resume_review(
+  resume_text: str,
+  job_description: str = "",
+  target_role: str = "",
+  seniority: str = "mid"
+) -> str:
+  """
+  Analyze a resume against a target role and optional job description, returning a
+  structured JSON report optimized for ATS-style screening and human readability.
+
+  This tool is designed to be called by the Resume Review Agent from a structured UI,
+  not from free-form chat. It always returns a single JSON object (no markdown).
+
+  Args:
+    resume_text: The full plain-text resume content.
+    job_description: The job description or posting to match against (optional but recommended).
+    target_role: The intended role/title (e.g., 'Senior Backend Engineer').
+    seniority: One of: 'junior', 'mid', 'senior', 'lead', used to calibrate expectations.
+
+  Returns:
+    A JSON string with this shape (keys are stable and safe to rely on in the UI):
+
+    {
+      "overall_score": 0-100,
+      "ats_score": 0-100,
+      "match_summary": "1-2 paragraph overview",
+      "strengths": [ "...", "..." ],
+      "weaknesses": [ "...", "..." ],
+      "missing_keywords": [ "...", "..." ],
+      "formatting_issues": [ "...", "..." ],
+      "recommendations": [ "...", "..." ],
+      "sections_to_improve": {
+        "summary": { "current": "...", "suggested": "...", "reason": "..." },
+        "experience": [
+          { "current": "...", "suggested": "...", "reason": "..." }
+        ],
+        "skills": { "current": "...", "suggested": "...", "reason": "..." }
+      }
+    }
+  """
+  from app.services.gemini import GeminiClient
+
+  # Defensive normalization
+  resume_text = (resume_text or "").strip()
+  job_description = (job_description or "").strip()
+  target_role = (target_role or "").strip()
+  seniority = (seniority or "mid").strip().lower()
+
+  if not resume_text:
+    return (
+      '{"error":"resume_text_required",'
+      '"message":"Resume text is required for analysis.","overall_score":0,"ats_score":0}'
+    )
+
+  if seniority not in ["junior", "entry", "mid", "senior", "lead"]:
+    seniority = "mid"
+
+  # Build a single, explicit prompt for Gemini with a strict JSON-only contract.
+  prompt_parts: List[str] = []
+  prompt_parts.append("You are an expert resume reviewer and ATS optimization specialist.")
+  prompt_parts.append(
+    "Your job is to evaluate the candidate's resume ONLY for the specified target role "
+    "and optional job description, focusing on ATS keyword match, clarity, impact, and structure."
+  )
+  prompt_parts.append("")
+  prompt_parts.append("CRITICAL RESPONSE FORMAT REQUIREMENTS:")
+  prompt_parts.append("- Respond with a SINGLE valid JSON object.")
+  prompt_parts.append("- DO NOT include any markdown, explanations, or surrounding text.")
+  prompt_parts.append("- Use only double quotes for JSON keys and string values.")
+  prompt_parts.append("- Do NOT include comments, trailing commas, or non-JSON content.")
+  prompt_parts.append("")
+  prompt_parts.append("The JSON object MUST have EXACTLY these top-level keys:")
+  prompt_parts.append(
+    '{'
+    '"overall_score": number between 0 and 100,'
+    '"ats_score": number between 0 and 100,'
+    '"match_summary": string,'
+    '"strengths": string array,'
+    '"weaknesses": string array,'
+    '"missing_keywords": string array,'
+    '"formatting_issues": string array,'
+    '"recommendations": string array,'
+    '"sections_to_improve": {'
+      '"summary": { "current": string, "suggested": string, "reason": string },'
+      '"experience": [ { "current": string, "suggested": string, "reason": string } ],'
+      '"skills": { "current": string, "suggested": string, "reason": string }'
+    '}'
+    '}'
+  )
+  prompt_parts.append("")
+  prompt_parts.append("Guidelines:")
+  prompt_parts.append("- Be specific and actionable in weaknesses and recommendations.")
+  prompt_parts.append("- Missing keywords should be important skills/phrases from the job description.")
+  prompt_parts.append(
+    "- Formatting issues should focus on things that can break ATS parsing or hurt readability "
+    "(e.g., tables, columns, images, inconsistent headings, dense blocks of text)."
+  )
+  prompt_parts.append(
+    "- When suggesting improved bullets in `sections_to_improve.experience`, use strong, "
+    "metric-driven, action-oriented statements aligned with the target role and seniority."
+  )
+  prompt_parts.append("")
+  prompt_parts.append(f"Target role (can be empty): {target_role or 'Not specified'}")
+  prompt_parts.append(f"Seniority level (junior/mid/senior/lead): {seniority}")
+  prompt_parts.append("")
+  prompt_parts.append("Job description (may be empty):")
+  prompt_parts.append(job_description or "[Not provided]")
+  prompt_parts.append("")
+  prompt_parts.append("Candidate resume:")
+  prompt_parts.append(resume_text)
+  prompt_parts.append("")
+  prompt_parts.append("Now produce the JSON object described above.")
+
+  full_prompt = "\n".join(prompt_parts)
+
+  try:
+    gemini_client = GeminiClient()
+    content = gemini_client.generate_response(
+      system_prompt=(
+        "You are an experienced recruiter and ATS optimization expert. "
+        "You ONLY output valid JSON objects according to the user's schema."
+      ),
+      messages=[{"role": "user", "content": full_prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.3,
+    )
+
+    # Best-effort trimming: if the model accidentally adds text before/after JSON, slice it.
+    if not content:
+      return (
+        '{"error":"generation_failed",'
+        '"message":"Resume review generation failed. Please try again.","overall_score":0,"ats_score":0}'
+      )
+
+    content = content.strip()
+    first_brace = content.find("{")
+    last_brace = content.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+      content = content[first_brace : last_brace + 1].strip()
+
+    return content
+  except Exception as e:
+    import traceback
+    print(f"Error in _generate_resume_review: {traceback.format_exc()}")
+    return (
+      '{"error":"internal_error",'
+      f'"message":"Unexpected error while generating resume review: {str(e)}","overall_score":0,"ats_score":0}}'
+    )
+
+
 def get_tools_for_agent_slug(slug: str) -> List[Tool]:
   """Return LangChain tools enabled for a given prebuilt agent slug."""
   tools: List[Tool] = []
@@ -1979,6 +2130,20 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
       )
     )
 
-  return tools
+  elif slug == PREBUILT_AGENT_SLUGS["resume_review_agent"]:
+    tools.append(
+      Tool(
+        name="generate_resume_review",
+        func=_generate_resume_review,
+        description=(
+          "Analyze a candidate resume against a target role and optional job description, "
+          "returning a structured JSON report optimized for ATS-style screening and "
+          "human-readable feedback. "
+          "Args: resume_text (str, required), job_description (str, optional), "
+          "target_role (str, optional), seniority (str: junior/mid/senior/lead, default='mid')."
+        ),
+      )
+    )
 
+  return tools
 

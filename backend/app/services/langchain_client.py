@@ -487,6 +487,62 @@ class LangchainAgentService:
           course_structure=course_structure,
           validation_criteria=validation_criteria,
         )
+
+    # Structured, tool-driven flow for Resume Review Agent.
+    # This agent is NOT a free-form chatbot: the frontend sends structured payloads
+    # (JSON) and we delegate directly to the resume review tool for deterministic output.
+    if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS.get("resume_review_agent"):
+      import json
+      from app.tools.prebuilt_agents import _generate_resume_review
+
+      text = latest_input or ""
+
+      # Primary contract: a marker followed by a JSON payload.
+      # Example:
+      #   RESUME_REVIEW_REQUEST
+      #   { "action": "review_resume", "resume_text": "...", ... }
+      marker = "RESUME_REVIEW_REQUEST"
+      if marker in text:
+        json_start = text.find("{", text.find(marker))
+        if json_start != -1:
+          payload_str = text[json_start:].strip()
+          try:
+            payload = json.loads(payload_str)
+          except Exception:
+            payload = {}
+        else:
+          payload = {}
+      else:
+        # Fallback: try to interpret the whole text as JSON if possible.
+        try:
+          payload = json.loads(text)
+        except Exception:
+          payload = {}
+
+      action = ""
+      if isinstance(payload, dict):
+        action = str(payload.get("action") or "").lower()
+
+      if action == "review_resume":
+        resume_text = str(payload.get("resume_text") or "").strip()
+        job_description = str(payload.get("job_description") or "").strip()
+        target_role = str(payload.get("target_role") or "").strip()
+        seniority = str(payload.get("seniority") or "mid").strip().lower()
+
+        try:
+          return _generate_resume_review(
+            resume_text=resume_text,
+            job_description=job_description,
+            target_role=target_role,
+            seniority=seniority,
+          )
+        except Exception as e:
+          import traceback
+          print(f"❌ Resume review tool failed: {traceback.format_exc()}")
+          return (
+            '{"error":"internal_error",'
+            f'"message":"Unexpected error while generating resume review: {str(e)}","overall_score":0,"ats_score":0}}'
+          )
     # Build messages with latest_input merged properly
     chat_history = self._history_to_messages(history, latest_input)
     

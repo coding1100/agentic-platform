@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/agents/:agentId/resume-review',
+      name: 'ResumeReview',
+      component: () => import('@/views/ResumeReview.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/agents/:agentId/course-creation',
       name: 'CourseCreation',
       component: () => import('@/views/CourseCreation.vue'),

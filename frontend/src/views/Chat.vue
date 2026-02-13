@@ -4,6 +4,7 @@
   <LanguagePractice v-else-if="isLanguagePracticeAgent" />
   <MicroLearning v-else-if="isMicroLearningAgent" />
   <ExamPrep v-else-if="isExamPrepAgent" />
+  <ResumeReview v-else-if="isResumeReviewAgent" />
   <div v-else class="chat-container">
     <header class="chat-header">
       <div class="header-left">
@@ -78,6 +79,7 @@ import CourseCreation from '@/views/CourseCreation.vue'
 import LanguagePractice from '@/views/LanguagePractice.vue'
 import MicroLearning from '@/views/MicroLearning.vue'
 import ExamPrep from '@/views/ExamPrep.vue'
+import ResumeReview from '@/views/ResumeReview.vue'
 import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
@@ -122,6 +124,13 @@ const isExamPrepAgent = computed(() => {
   return a?.slug === 'education.exam_prep_agent' || 
          a?.name?.toLowerCase().includes('exam prep') ||
          a?.name?.toLowerCase().includes('exam preparation')
+})
+
+const isResumeReviewAgent = computed(() => {
+  const a = agent.value
+  return a?.slug === 'career.resume_review_agent' || 
+         a?.name?.toLowerCase().includes('resume review') ||
+         a?.name?.toLowerCase().includes('ats resume')
 })
 
 onMounted(async () => {

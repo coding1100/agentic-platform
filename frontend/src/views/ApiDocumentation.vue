@@ -48,8 +48,8 @@
               </button>
             </div>
               <p class="docs-note">
-                Replace <code>{agent_slug}</code> with your agent's slug. 
-                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>
+                Replace <code>{agent_slug}</code> with your agent's slug.
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>, <code>career.resume_review_agent</code>
               </p>
 
             <h3>Authentication</h3>
@@ -545,6 +545,91 @@
             </ul>
           </section>
 
+          <!-- Resume Review Agent Section -->
+          <section id="resume-review" class="docs-section-main">
+            <h2>Resume Review Agent Integration</h2>
+            <p class="section-description">
+              <strong>Agent Slug:</strong> <code>career.resume_review_agent</code><br>
+              An ATS-optimized resume reviewer that returns structured, actionable feedback and rewrite suggestions.
+            </p>
+
+            <h3>Typical Workflow</h3>
+            <ol class="flow-list">
+              <li><strong>Provide Resume:</strong> Send resume text (plain text) and optional job description</li>
+              <li><strong>Role Context:</strong> Specify target role and seniority for calibrated feedback</li>
+              <li><strong>ATS Review:</strong> Agent analyzes keyword match, impact, and formatting</li>
+              <li><strong>Structured Output:</strong> Receive JSON report with scores, keywords, and rewrites</li>
+            </ol>
+
+            <h3>Endpoint</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/career.resume_review_agent/chat</code>
+            </div>
+
+            <h3>Request Format</h3>
+            <h4>Headers</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+              <button
+                @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)"
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h4>Request Body</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "optional-uuid-or-null",
+  "message": "RESUME_REVIEW_REQUEST\\n{ \"action\": \"review_resume\", \"resume_text\": \"Paste resume text here\", \"job_description\": \"Optional job description\", \"target_role\": \"Senior Backend Engineer\", \"seniority\": \"mid\" }"
+}, null, 2) }}</pre>
+              <button
+                @click="copyToClipboard(JSON.stringify({
+  conversation_id: null,
+  message: 'RESUME_REVIEW_REQUEST\\n{ \"action\": \"review_resume\", \"resume_text\": \"Paste resume text here\", \"job_description\": \"Optional job description\", \"target_role\": \"Senior Backend Engineer\", \"seniority\": \"mid\" }'
+}, null, 2), false)"
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h3>Example: Requesting a Resume Review</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ getResumeReviewExample() }}</pre>
+              <button @click="copyToClipboard(getResumeReviewExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> Use the <code>RESUME_REVIEW_REQUEST</code> marker to get a strict JSON response
+              for dashboards and automated parsing.
+            </p>
+
+            <h3>Response Format</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "{...json report...}",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+            </div>
+
+            <h3>Key Features</h3>
+            <ul class="docs-notes">
+              <li><strong>Overall & ATS Scores:</strong> 0-100 scoring for quality and match</li>
+              <li><strong>Keyword Gap Analysis:</strong> Missing skills/phrases from the job description</li>
+              <li><strong>Rewrite Suggestions:</strong> Improved summary, experience bullets, and skills</li>
+              <li><strong>Formatting Checks:</strong> ATS-friendly structure guidance</li>
+            </ul>
+          </section>
+
           <!-- Quick Start Section -->
           <section id="quick-start" class="docs-section-main">
             <h2>Quick Start Guide</h2>
@@ -690,6 +775,7 @@ const tabs = [
   { id: 'language-practice', label: 'Language Practice', icon: '🌐' },
   { id: 'micro-learning', label: 'Micro-Learning', icon: '📖' },
   { id: 'exam-prep', label: 'Exam Prep', icon: '📝' },
+  { id: 'resume-review', label: 'Resume Review', icon: '📄' },
   { id: 'quick-start', label: 'Quick Start', icon: '🚀' },
   { id: 'code-examples', label: 'Code Examples', icon: '💻' },
   { id: 'errors', label: 'Error Codes', icon: '⚠️' }
@@ -926,6 +1012,29 @@ Body: {
 // Maintain conversation_id throughout to preserve progress and context`
 }
 
+function getResumeReviewExample(): string {
+  return `// Request resume review with structured payload
+POST ${baseUrl.value}/api/v1/public/agents/career.resume_review_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "RESUME_REVIEW_REQUEST
+{
+  \\"action\\": \\"review_resume\\",
+  \\"resume_text\\": \\"<paste resume text here>\\",
+  \\"job_description\\": \\"<optional job description>\\",
+  \\"target_role\\": \\"Senior Backend Engineer\\",
+  \\"seniority\\": \\"mid\\"
+}"
+}
+
+// Response message contains a JSON report with scores, keywords, and rewrites.
+// Keep the same conversation_id for follow-up questions.`
+}
+
 function getQuickStartExample(): string {
   return `// Step 1: Make your first API call
 const response = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
@@ -1105,6 +1214,13 @@ Headers: {
     "slug": "education.course_creation_agent",
     "description": "A personal tutor agent that guides...",
     "category": "education"
+  },
+  {
+    "id": "uuid",
+    "name": "Resume Review Agent",
+    "slug": "career.resume_review_agent",
+    "description": "ATS-optimized resume review agent with structured feedback...",
+    "category": "career"
   },
   // ... more agents
 ]`
