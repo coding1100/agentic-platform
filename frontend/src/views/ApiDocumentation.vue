@@ -49,7 +49,7 @@
             </div>
               <p class="docs-note">
                 Replace <code>{agent_slug}</code> with your agent's slug.
-                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>, <code>career.resume_review_agent</code>
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>, <code>career.resume_review_agent</code>, <code>career.career_coach_agent</code>, <code>career.skill_gap_agent</code>
               </p>
 
             <h3>Authentication</h3>
@@ -636,6 +636,160 @@
             </ul>
           </section>
 
+          <!-- Career Coach Agent Section -->
+          <section id="career-coach" class="docs-section-main">
+            <h2>Career Coach Agent Integration</h2>
+            <p class="section-description">
+              <strong>Agent Slug:</strong> <code>career.career_coach_agent</code><br>
+              A structured career strategy agent for professionals that supports role direction, opportunity strategy,
+              interview readiness, and weekly execution with action-oriented outputs.
+            </p>
+
+            <h3>Typical Workflow</h3>
+            <ol class="flow-list">
+              <li><strong>Career Intake:</strong> Capture current role, target role, constraints, and goals</li>
+              <li><strong>Opportunity Strategy:</strong> Define positioning, channel mix, and market-facing next moves</li>
+              <li><strong>Roadmap Design:</strong> Build a practical 30/60/90-day plan with milestones and risks</li>
+              <li><strong>Weekly Execution:</strong> Run check-ins and recalibrate plan based on progress</li>
+              <li><strong>Interview Readiness:</strong> Generate a focused prep plan and question bank strategy</li>
+            </ol>
+
+            <h3>Endpoint</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/career.career_coach_agent/chat</code>
+            </div>
+
+            <h3>Request Format</h3>
+            <h4>Headers</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+              <button
+                @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)"
+                class="btn-copy-inline"
+              >
+                📋
+              </button>
+            </div>
+
+            <h4>Request Body</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ getCareerCoachRequestBodyExample() }}</pre>
+              <button @click="copyToClipboard(getCareerCoachRequestBodyExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> Use the <code>CAREER_COACH_REQUEST</code> marker with a structured
+              <code>action</code> and <code>payload</code> for deterministic, machine-readable outputs.
+            </p>
+
+            <h3>Example: Building a Career Roadmap</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ getCareerCoachExample() }}</pre>
+              <button @click="copyToClipboard(getCareerCoachExample(), false)" class="btn-copy-inline">📋</button>
+            </div>
+
+            <h3>Supported Actions</h3>
+            <ul class="docs-notes">
+              <li><code>intake_assessment</code>: structured profile and baseline career direction</li>
+              <li><code>opportunity_strategy</code>: role-market positioning, channel mix, and 30-day experiments</li>
+              <li><code>build_roadmap</code>: time-bound roadmap with milestones and guardrails</li>
+              <li><code>weekly_checkin</code>: progress tracking, blockers, and next-week plan</li>
+              <li><code>interview_readiness</code>: role-specific preparation strategy and practice plan</li>
+            </ul>
+
+            <h3>Response Format</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "{...json strategy report...}",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+            </div>
+          </section>
+
+          <!-- Skill Gap Agent Section -->
+          <section id="skill-gap" class="docs-section-main">
+            <h2>Skill Gap Agent Integration</h2>
+            <p class="section-description">
+              <strong>Agent Slug:</strong> <code>career.skill_gap_agent</code><br>
+              A structured employee development agent that identifies missing skills, prioritizes capability gaps,
+              and builds measurable upskilling plans.
+            </p>
+
+            <h3>Typical Workflow</h3>
+            <ol class="flow-list">
+              <li><strong>Profile Baseline:</strong> Capture current role, skills, evidence, and constraints</li>
+              <li><strong>Gap Identification:</strong> Compare current capabilities with target-role expectations</li>
+              <li><strong>Development Plan:</strong> Build a timeline-based plan with weekly evidence outputs</li>
+              <li><strong>Weekly Check-In:</strong> Track progress, blockers, and plan adjustments</li>
+              <li><strong>Readiness Assessment:</strong> Measure readiness and remaining competency gaps</li>
+            </ol>
+
+            <h3>Endpoint</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/career.skill_gap_agent/chat</code>
+            </div>
+
+            <h3>Request Format</h3>
+            <h4>Headers</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}, null, 2) }}</pre>
+              <button
+                @click="copyToClipboard(JSON.stringify({
+  'X-API-Key': 'your_api_key_here',
+  'Content-Type': 'application/json'
+}, null, 2), false)"
+                class="btn-copy-inline"
+              >
+                Copy
+              </button>
+            </div>
+
+            <h4>Request Body</h4>
+            <div class="code-block">
+              <pre class="json-example">{{ getSkillGapRequestBodyExample() }}</pre>
+              <button @click="copyToClipboard(getSkillGapRequestBodyExample(), false)" class="btn-copy-inline">Copy</button>
+            </div>
+            <p class="docs-note">
+              <strong>Tip:</strong> Use the <code>SKILL_GAP_REQUEST</code> marker with a structured
+              <code>action</code> and <code>payload</code> for deterministic, machine-readable outputs.
+            </p>
+
+            <h3>Example: Identifying Skill Gaps</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ getSkillGapExample() }}</pre>
+              <button @click="copyToClipboard(getSkillGapExample(), false)" class="btn-copy-inline">Copy</button>
+            </div>
+
+            <h3>Supported Actions</h3>
+            <ul class="docs-notes">
+              <li><code>profile_baseline</code>: build current capability snapshot and focus areas</li>
+              <li><code>identify_skill_gaps</code>: prioritize missing skills and quick wins for target role</li>
+              <li><code>build_development_plan</code>: generate timeline-based upskilling plan</li>
+              <li><code>weekly_progress_checkin</code>: assess execution progress and adjustments</li>
+              <li><code>readiness_assessment</code>: evaluate target-role readiness with competency breakdown</li>
+            </ul>
+
+            <h3>Response Format</h3>
+            <div class="code-block">
+              <pre class="json-example">{{ JSON.stringify({
+  "conversation_id": "uuid-string",
+  "message": "{...json skill gap report...}",
+  "agent_id": "uuid-string"
+}, null, 2) }}</pre>
+            </div>
+          </section>
+
           <!-- Quick Start Section -->
           <section id="quick-start" class="docs-section-main">
             <h2>Quick Start Guide</h2>
@@ -782,6 +936,8 @@ const tabs = [
   { id: 'micro-learning', label: 'Micro-Learning', icon: '📖' },
   { id: 'exam-prep', label: 'Exam Prep', icon: '📝' },
   { id: 'resume-review', label: 'Resume Review', icon: '📄' },
+  { id: 'career-coach', label: 'Career Coach', icon: '🧭' },
+  { id: 'skill-gap', label: 'Skill Gap', icon: 'SG' },
   { id: 'quick-start', label: 'Quick Start', icon: '🚀' },
   { id: 'code-examples', label: 'Code Examples', icon: '💻' },
   { id: 'errors', label: 'Error Codes', icon: '⚠️' }
@@ -1041,6 +1197,110 @@ Body: {
 // Keep the same conversation_id for follow-up questions.`
 }
 
+function getCareerCoachRequestBodyExample(): string {
+  return JSON.stringify({
+    conversation_id: 'optional-uuid-or-null',
+    message: 'CAREER_COACH_REQUEST\n' + JSON.stringify({
+      action: 'opportunity_strategy',
+      payload: {
+        current_role: 'Product Analyst',
+        target_role: 'Senior Product Manager',
+        years_experience: 4,
+        weekly_hours: 6,
+        timeline_weeks: 12,
+        current_skills: ['Stakeholder communication', 'Analytics'],
+        achievements: ['Led roadmap prioritization for 2 product launches'],
+        constraints: [
+          'Limited weekday availability'
+        ],
+        career_interests: ['B2B SaaS product strategy', 'People leadership']
+      }
+    })
+  }, null, 2)
+}
+
+function getCareerCoachExample(): string {
+  return `// Build an opportunity strategy with structured payload
+POST ${baseUrl.value}/api/v1/public/agents/career.career_coach_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "CAREER_COACH_REQUEST
+{
+  \\"action\\": \\"opportunity_strategy\\",
+  \\"payload\\": {
+    \\"current_role\\": \\"Software Engineer\\",
+    \\"target_role\\": \\"Engineering Manager\\",
+    \\"years_experience\\": 6,
+    \\"weekly_hours\\": 6,
+    \\"timeline_weeks\\": 16,
+    \\"current_skills\\": [\\"System design\\", \\"Execution\\"],
+    \\"constraints\\": [\\"Can allocate 6 hours/week\\"]
+  }
+}"
+}
+
+// Response message contains structured JSON with positioning, role tracks, channel mix, and experiments.
+// Reuse conversation_id for follow-up actions like "weekly_checkin" or "interview_readiness".`
+}
+
+function getSkillGapRequestBodyExample(): string {
+  return JSON.stringify({
+    conversation_id: 'optional-uuid-or-null',
+    message: 'SKILL_GAP_REQUEST\n' + JSON.stringify({
+      action: 'identify_skill_gaps',
+      payload: {
+        current_role: 'Backend Engineer',
+        target_role: 'Senior Backend Engineer',
+        years_experience: 4,
+        weekly_learning_hours: 5,
+        current_skills: [
+          'API design',
+          'Database fundamentals',
+          'Service debugging'
+        ],
+        role_expectations: [
+          'Distributed systems',
+          'Performance tuning',
+          'Technical leadership'
+        ],
+        constraints: [
+          'Can commit 5 hours per week'
+        ]
+      }
+    })
+  }, null, 2)
+}
+
+function getSkillGapExample(): string {
+  return `// Identify employee skill gaps with structured payload
+POST ${baseUrl.value}/api/v1/public/agents/career.skill_gap_agent/chat
+Headers: {
+  "X-API-Key": "your_api_key_here",
+  "Content-Type": "application/json"
+}
+Body: {
+  "conversation_id": null,
+  "message": "SKILL_GAP_REQUEST
+{
+  \\"action\\": \\"identify_skill_gaps\\",
+  \\"payload\\": {
+    \\"current_role\\": \\"Data Analyst\\",
+    \\"target_role\\": \\"Senior Data Analyst\\",
+    \\"years_experience\\": 3,
+    \\"current_skills\\": [\\"SQL\\", \\"Tableau\\", \\"Stakeholder reporting\\"],
+    \\"role_expectations\\": [\\"Experiment design\\", \\"Advanced statistics\\", \\"Data storytelling\\"]
+  }
+}"
+}
+
+// Response message contains JSON with prioritized gaps, quick wins, and development recommendations.
+// Reuse conversation_id for actions like "build_development_plan" and "weekly_progress_checkin".`
+}
+
 function getQuickStartExample(): string {
   return `// Step 1: Make your first API call
 const response = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
@@ -1220,6 +1480,20 @@ Headers: {
     "slug": "education.course_creation_agent",
     "description": "A personal tutor agent that guides...",
     "category": "education"
+  },
+  {
+    "id": "uuid",
+    "name": "Career Coach Agent",
+    "slug": "career.career_coach_agent",
+    "description": "Structured career strategy and execution coaching...",
+    "category": "career"
+  },
+  {
+    "id": "uuid",
+    "name": "Skill Gap Agent",
+    "slug": "career.skill_gap_agent",
+    "description": "Employee capability gap detection and development planning...",
+    "category": "career"
   },
   {
     "id": "uuid",

@@ -5,6 +5,8 @@
   <MicroLearning v-else-if="isMicroLearningAgent" />
   <ExamPrep v-else-if="isExamPrepAgent" />
   <ResumeReview v-else-if="isResumeReviewAgent" />
+  <CareerCoach v-else-if="isCareerCoachAgent" />
+  <SkillGap v-else-if="isSkillGapAgent" />
   <div v-else class="chat-container">
     <header class="chat-header">
       <div class="header-left">
@@ -80,6 +82,8 @@ import LanguagePractice from '@/views/LanguagePractice.vue'
 import MicroLearning from '@/views/MicroLearning.vue'
 import ExamPrep from '@/views/ExamPrep.vue'
 import ResumeReview from '@/views/ResumeReview.vue'
+import CareerCoach from '@/views/CareerCoach.vue'
+import SkillGap from '@/views/SkillGap.vue'
 import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
@@ -131,6 +135,18 @@ const isResumeReviewAgent = computed(() => {
   return a?.slug === 'career.resume_review_agent' || 
          a?.name?.toLowerCase().includes('resume review') ||
          a?.name?.toLowerCase().includes('ats resume')
+})
+
+const isCareerCoachAgent = computed(() => {
+  const a = agent.value
+  return a?.slug === 'career.career_coach_agent' ||
+         a?.name?.toLowerCase().includes('career coach')
+})
+
+const isSkillGapAgent = computed(() => {
+  const a = agent.value
+  return a?.slug === 'career.skill_gap_agent' ||
+         a?.name?.toLowerCase().includes('skill gap')
 })
 
 onMounted(async () => {

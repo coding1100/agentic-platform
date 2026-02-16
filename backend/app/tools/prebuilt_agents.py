@@ -1,3 +1,4 @@
+import json
 from typing import List
 from langchain_core.tools import Tool
 
@@ -9,6 +10,8 @@ PREBUILT_AGENT_SLUGS = {
   "micro_learning_agent": "education.micro_learning_agent",
   "exam_prep_agent": "education.exam_prep_agent",
   "resume_review_agent": "career.resume_review_agent",
+  "career_coach_agent": "career.career_coach_agent",
+  "skill_gap_agent": "career.skill_gap_agent",
 }
 
 
@@ -1823,6 +1826,1150 @@ def _generate_resume_review(
     )
 
 
+def _extract_first_json_object(text: str) -> str:
+  """Best-effort extraction of the first top-level JSON object from text."""
+  if not text:
+    return ""
+  start = text.find("{")
+  end = text.rfind("}")
+  if start == -1 or end == -1 or end <= start:
+    return ""
+  return text[start : end + 1].strip()
+
+
+def _parse_json_payload(payload_json: str) -> dict:
+  """Parse a JSON payload safely, supporting wrapped text."""
+  raw = (payload_json or "").strip()
+  if not raw:
+    return {}
+  try:
+    parsed = json.loads(raw)
+    return parsed if isinstance(parsed, dict) else {}
+  except Exception:
+    candidate = _extract_first_json_object(raw)
+    if not candidate:
+      return {}
+    try:
+      parsed = json.loads(candidate)
+      return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+      return {}
+
+
+def _normalize_string_list(value) -> List[str]:
+  """Normalize list-like input (list/string) to non-empty string list."""
+  if value is None:
+    return []
+  if isinstance(value, list):
+    return [str(item).strip() for item in value if str(item).strip()]
+  if isinstance(value, str):
+    separators = [",", "\n", ";"]
+    normalized = value
+    for sep in separators[1:]:
+      normalized = normalized.replace(sep, separators[0])
+    return [item.strip() for item in normalized.split(separators[0]) if item.strip()]
+  return [str(value).strip()] if str(value).strip() else []
+
+
+def _coerce_int(value, default: int, minimum: int = 0, maximum: int = 520) -> int:
+  """Coerce a value into a bounded integer."""
+  try:
+    parsed = int(float(value))
+  except Exception:
+    parsed = default
+  return max(minimum, min(maximum, parsed))
+
+
+def _career_coach_error(action: str, code: str, message: str) -> str:
+  """Return a stable JSON error payload for Career Coach flows."""
+  return json.dumps(
+    {
+      "action": action,
+      "status": "error",
+      "error": code,
+      "message": message,
+    },
+    ensure_ascii=False,
+  )
+
+
+def _generate_career_coach_response(action: str, payload: dict) -> str:
+  """
+  Generate structured JSON outputs for Career Coach agent actions.
+
+  Supported actions:
+    - intake_assessment
+    - opportunity_strategy
+    - build_roadmap
+    - weekly_checkin
+    - interview_readiness
+  """
+  from app.services.gemini import GeminiClient
+
+  raw_action = (action or "").strip().lower()
+  action_aliases = {
+    # Backward compatibility with previously exposed action naming.
+    "skill_gap_analysis": "opportunity_strategy",
+  }
+  action = action_aliases.get(raw_action, raw_action)
+  allowed_actions = {
+    "intake_assessment",
+    "opportunity_strategy",
+    "build_roadmap",
+    "weekly_checkin",
+    "interview_readiness",
+  }
+  if action not in allowed_actions:
+    return _career_coach_error(
+      action=action or "unknown",
+      code="invalid_action",
+      message="Unsupported career coach action.",
+    )
+
+  payload = payload if isinstance(payload, dict) else {}
+
+  list_like_keys = [
+    "current_skills",
+    "achievements",
+    "constraints",
+    "career_interests",
+    "target_skills",
+    "completed_topics",
+    "completed_tasks",
+    "blocked_tasks",
+    "wins",
+    "interview_types",
+  ]
+  normalized_payload = dict(payload)
+  for key in list_like_keys:
+    if key in normalized_payload:
+      normalized_payload[key] = _normalize_string_list(normalized_payload.get(key))
+
+  if "years_experience" in normalized_payload:
+    normalized_payload["years_experience"] = _coerce_int(
+      normalized_payload.get("years_experience"), default=0, minimum=0, maximum=50
+    )
+  if "timeline_weeks" in normalized_payload:
+    normalized_payload["timeline_weeks"] = _coerce_int(
+      normalized_payload.get("timeline_weeks"), default=12, minimum=2, maximum=104
+    )
+  if "weekly_hours" in normalized_payload:
+    normalized_payload["weekly_hours"] = _coerce_int(
+      normalized_payload.get("weekly_hours"), default=6, minimum=1, maximum=80
+    )
+  if "week_number" in normalized_payload:
+    normalized_payload["week_number"] = _coerce_int(
+      normalized_payload.get("week_number"), default=1, minimum=1, maximum=520
+    )
+  if "time_spent_hours" in normalized_payload:
+    normalized_payload["time_spent_hours"] = _coerce_int(
+      normalized_payload.get("time_spent_hours"), default=0, minimum=0, maximum=100
+    )
+
+  if action in {"opportunity_strategy", "build_roadmap", "interview_readiness"}:
+    target_role = str(normalized_payload.get("target_role") or "").strip()
+    if not target_role:
+      return _career_coach_error(
+        action=action,
+        code="target_role_required",
+        message="target_role is required for this action.",
+      )
+
+  if action == "intake_assessment":
+    content_available = any(
+      bool(str(normalized_payload.get(key) or "").strip())
+      for key in ["current_role", "target_role", "current_skills", "achievements", "career_interests"]
+    )
+    if not content_available:
+      return _career_coach_error(
+        action=action,
+        code="insufficient_input",
+        message=(
+          "Provide at least one of current_role, target_role, current_skills, "
+          "achievements, or career_interests."
+        ),
+      )
+
+  def _normalize_topic_label(value: str) -> str:
+    import re
+
+    lowered = str(value or "").strip().lower()
+    lowered = re.sub(r"[^a-z0-9\s]+", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+  def _collect_expected_week_topics(roadmap_report: dict, week_number: int) -> List[str]:
+    if not isinstance(roadmap_report, dict):
+      return []
+
+    weekly_plan = roadmap_report.get("weekly_plan")
+    if not isinstance(weekly_plan, list):
+      return []
+
+    current_week_plan = None
+    for item in weekly_plan:
+      if not isinstance(item, dict):
+        continue
+      plan_week = _coerce_int(item.get("week"), default=-1, minimum=-1, maximum=520)
+      if plan_week == week_number:
+        current_week_plan = item
+        break
+
+    if not isinstance(current_week_plan, dict):
+      return []
+
+    candidates: List[str] = []
+    candidates.extend(_normalize_string_list(current_week_plan.get("topics")))
+    if not candidates:
+      candidates.extend(_normalize_string_list(current_week_plan.get("tasks")))
+
+    focus = str(current_week_plan.get("focus") or "").strip()
+    if focus:
+      candidates.append(focus)
+
+    deduped: List[str] = []
+    seen = set()
+    for candidate in candidates:
+      normalized = _normalize_topic_label(candidate)
+      if not normalized or normalized in seen:
+        continue
+      seen.add(normalized)
+      deduped.append(str(candidate).strip())
+    return deduped
+
+  if action == "weekly_checkin":
+    completed_topics = _normalize_string_list(normalized_payload.get("completed_topics"))
+    normalized_payload["completed_topics"] = completed_topics
+    if not completed_topics:
+      return _career_coach_error(
+        action=action,
+        code="completed_topics_required",
+        message="Provide completed_topics for the weekly check-in.",
+      )
+
+    roadmap_report = normalized_payload.get("roadmap_report")
+    if not isinstance(roadmap_report, dict):
+      return _career_coach_error(
+        action=action,
+        code="roadmap_required",
+        message="roadmap_report is required for weekly_checkin.",
+      )
+
+    week_number = _coerce_int(normalized_payload.get("week_number"), default=1, minimum=1, maximum=520)
+    expected_topics = _collect_expected_week_topics(roadmap_report, week_number)
+    normalized_payload["expected_week_topics"] = expected_topics
+
+    matched_topics: List[str] = []
+    unmatched_topics: List[str] = []
+    normalized_expected = [_normalize_topic_label(item) for item in expected_topics]
+
+    if normalized_expected:
+      for provided_topic in completed_topics:
+        provided_normalized = _normalize_topic_label(provided_topic)
+        has_match = any(
+          provided_normalized and (
+            provided_normalized in expected_normalized or expected_normalized in provided_normalized
+          )
+          for expected_normalized in normalized_expected
+        )
+        if has_match:
+          matched_topics.append(provided_topic)
+        else:
+          unmatched_topics.append(provided_topic)
+
+      normalized_payload["matched_roadmap_topics"] = matched_topics
+      normalized_payload["unmatched_topics"] = unmatched_topics
+
+      if not matched_topics:
+        return _career_coach_error(
+          action=action,
+          code="topic_mismatch",
+          message=(
+            "completed_topics must align with roadmap topics for this week. "
+            f"Expected topics include: {', '.join(expected_topics[:8])}"
+          ),
+        )
+
+  schema_by_action = {
+    "intake_assessment": """{
+  "action": "intake_assessment",
+  "status": "ok",
+  "profile_summary": "string",
+  "professional_brand": "string",
+  "strengths_to_leverage": ["string"],
+  "risks_to_address": ["string"],
+  "recommended_career_paths": [
+    { "path": "string", "fit_score": 0, "rationale": "string", "first_steps": ["string"] }
+  ],
+  "immediate_priorities": ["string"],
+  "ninety_day_focus": ["string"],
+  "metrics_to_track": [
+    { "metric": "string", "target": "string", "cadence": "weekly|biweekly|monthly" }
+  ],
+  "assumptions": ["string"],
+  "confidence_score": 0
+}""",
+    "opportunity_strategy": """{
+  "action": "opportunity_strategy",
+  "status": "ok",
+  "target_role": "string",
+  "market_fit_score": 0,
+  "strategy_summary": "string",
+  "positioning_statement": "string",
+  "top_role_tracks": [
+    {
+      "role_title": "string",
+      "fit_score": 0,
+      "why_fit": "string",
+      "entry_points": ["string"]
+    }
+  ],
+  "application_channel_mix": [
+    { "channel": "referrals|direct_apply|recruiter_outreach|community", "target_share": "string", "weekly_actions": ["string"] }
+  ],
+  "market_signals_to_watch": ["string"],
+  "networking_plan": ["string"],
+  "portfolio_narrative": ["string"],
+  "thirty_day_experiments": [
+    { "experiment": "string", "success_metric": "string", "time_budget_hours": 0 }
+  ],
+  "risks_and_countermoves": [
+    { "risk": "string", "countermove": "string" }
+  ],
+  "assumptions": ["string"]
+}""",
+    "build_roadmap": """{
+  "action": "build_roadmap",
+  "status": "ok",
+  "target_role": "string",
+  "timeline_weeks": 0,
+  "roadmap_summary": "string",
+  "phases": [
+    {
+      "phase_name": "string",
+      "start_week": 0,
+      "end_week": 0,
+      "goal": "string",
+      "key_topics": ["string"],
+      "milestones": ["string"],
+      "deliverables": ["string"],
+      "success_criteria": ["string"]
+    }
+  ],
+  "weekly_plan": [
+    {
+      "week": 0,
+      "focus": "string",
+      "topics": ["string"],
+      "tasks": ["string"],
+      "time_budget_hours": 0,
+      "output": "string"
+    }
+  ],
+  "application_strategy": {
+    "start_week": 0,
+    "target_applications_per_week": 0,
+    "target_referrals_per_month": 0,
+    "company_tiers": ["string"]
+  },
+  "review_cadence": { "weekly_checkin": "string", "monthly_review": "string" },
+  "burnout_guardrails": ["string"],
+  "assumptions": ["string"]
+}""",
+    "weekly_checkin": """{
+  "action": "weekly_checkin",
+  "status": "ok",
+  "week_number": 0,
+  "progress_score": 0,
+  "progress_status": "on_track|at_risk|off_track",
+  "completed_topics": ["string"],
+  "matched_roadmap_topics": ["string"],
+  "unmatched_topics": ["string"],
+  "topic_alignment_note": "string",
+  "wins": ["string"],
+  "blockers": [{ "blocker": "string", "impact": "string", "next_step": "string", "owner": "string" }],
+  "plan_adjustments": [{ "change": "string", "reason": "string" }],
+  "next_week_plan": ["string"],
+  "motivation_note": "string",
+  "escalate_if": ["string"],
+  "assumptions": ["string"]
+}""",
+    "interview_readiness": """{
+  "action": "interview_readiness",
+  "status": "ok",
+  "target_role": "string",
+  "readiness_score": 0,
+  "readiness_breakdown": [{ "area": "string", "score": 0, "gap": "string" }],
+  "top_question_themes": [
+    { "theme": "string", "sample_questions": ["string"], "what_good_looks_like": ["string"] }
+  ],
+  "story_bank": [{ "story_title": "string", "competencies": ["string"], "outline": ["string"] }],
+  "technical_round_plan": ["string"],
+  "behavioral_round_plan": ["string"],
+  "mock_schedule": [{ "week": 0, "focus": "string", "session_goal": "string" }],
+  "negotiation_prep": ["string"],
+  "final_30_day_checklist": ["string"],
+  "assumptions": ["string"]
+}""",
+  }
+
+  action_guidance = {
+    "intake_assessment": (
+      "Use the profile details to produce a realistic baseline, clear positioning, "
+      "and concrete priorities tailored to the user's context."
+    ),
+    "opportunity_strategy": (
+      "Build a role-market strategy focused on positioning, channel mix, narrative, and measurable experiments. "
+      "Do not do detailed skill-gap diagnostics in this action."
+    ),
+    "build_roadmap": (
+      "Produce a practical execution plan with measurable weekly outputs and a sustainable workload. "
+      "Each week must include explicit topics that can be used for weekly check-in validation."
+    ),
+    "weekly_checkin": (
+      "Evaluate momentum against the roadmap for the specific week. "
+      "Use completed_topics and report roadmap-topic alignment before proposing adjustments."
+    ),
+    "interview_readiness": (
+      "Assess readiness by interview dimension, include practical drills, and create a focused preparation sequence."
+    ),
+  }
+
+  prompt = "\n".join(
+    [
+      "You are an elite Career Coach for working professionals.",
+      "You provide structured, execution-focused advice grounded in the user's input.",
+      "Do not provide generic motivational filler. Be specific and practical.",
+      "",
+      f"ACTION: {action}",
+      "",
+      "INPUT PAYLOAD (JSON):",
+      json.dumps(normalized_payload, ensure_ascii=False, indent=2),
+      "",
+      "RESPONSE CONTRACT:",
+      "- Return ONLY one valid JSON object.",
+      "- Do not add markdown fences or explanatory text outside JSON.",
+      "- Do not use placeholders (no <...>, no [insert ...]).",
+      "- Use concrete recommendations tied to the payload.",
+      "- Keep lists concise but actionable.",
+      "",
+      "ACTION-SPECIFIC GUIDANCE:",
+      action_guidance[action],
+      "",
+      "JSON SCHEMA (keys must match exactly):",
+      schema_by_action[action],
+    ]
+  )
+
+  try:
+    gemini_client = GeminiClient()
+    content = gemini_client.generate_response(
+      system_prompt=(
+        "You are a structured career strategy engine. "
+        "Return strict JSON only, following the user-provided schema exactly."
+      ),
+      messages=[{"role": "user", "content": prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.35,
+    )
+  except Exception as e:
+    return _career_coach_error(
+      action=action,
+      code="generation_failed",
+      message=f"Failed to generate career coach response: {str(e)}",
+    )
+
+  if not content:
+    return _career_coach_error(
+      action=action,
+      code="empty_response",
+      message="Model returned an empty response.",
+    )
+
+  candidate = _extract_first_json_object(content.strip())
+  if not candidate:
+    return _career_coach_error(
+      action=action,
+      code="invalid_json",
+      message="Model response did not contain a valid JSON object.",
+    )
+
+  try:
+    parsed = json.loads(candidate)
+  except Exception:
+    return _career_coach_error(
+      action=action,
+      code="invalid_json",
+      message="Model response was not valid JSON.",
+    )
+
+  if not isinstance(parsed, dict):
+    return _career_coach_error(
+      action=action,
+      code="invalid_schema",
+      message="Model response must be a JSON object.",
+    )
+
+  def _as_string_list(value) -> List[str]:
+    if isinstance(value, list):
+      return [str(item).strip() for item in value if str(item).strip()]
+    return _normalize_string_list(value)
+
+  def _as_object_list(value) -> List[dict]:
+    if not isinstance(value, list):
+      return []
+    return [item for item in value if isinstance(item, dict)]
+
+  if action == "intake_assessment":
+    parsed["strengths_to_leverage"] = _as_string_list(parsed.get("strengths_to_leverage"))
+    parsed["risks_to_address"] = _as_string_list(parsed.get("risks_to_address"))
+    parsed["immediate_priorities"] = _as_string_list(parsed.get("immediate_priorities"))
+    parsed["ninety_day_focus"] = _as_string_list(parsed.get("ninety_day_focus"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["confidence_score"] = _coerce_int(parsed.get("confidence_score"), default=0, minimum=0, maximum=100)
+    paths = []
+    for item in _as_object_list(parsed.get("recommended_career_paths")):
+      paths.append(
+        {
+          "path": str(item.get("path") or "").strip(),
+          "fit_score": _coerce_int(item.get("fit_score"), default=0, minimum=0, maximum=100),
+          "rationale": str(item.get("rationale") or "").strip(),
+          "first_steps": _as_string_list(item.get("first_steps")),
+        }
+      )
+    parsed["recommended_career_paths"] = paths
+    metrics = []
+    for item in _as_object_list(parsed.get("metrics_to_track")):
+      metrics.append(
+        {
+          "metric": str(item.get("metric") or "").strip(),
+          "target": str(item.get("target") or "").strip(),
+          "cadence": str(item.get("cadence") or "").strip(),
+        }
+      )
+    parsed["metrics_to_track"] = metrics
+
+  elif action == "opportunity_strategy":
+    parsed["market_fit_score"] = _coerce_int(parsed.get("market_fit_score"), default=0, minimum=0, maximum=100)
+    parsed["market_signals_to_watch"] = _as_string_list(parsed.get("market_signals_to_watch"))
+    parsed["networking_plan"] = _as_string_list(parsed.get("networking_plan"))
+    parsed["portfolio_narrative"] = _as_string_list(parsed.get("portfolio_narrative"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["top_role_tracks"] = _as_object_list(parsed.get("top_role_tracks"))
+    parsed["application_channel_mix"] = _as_object_list(parsed.get("application_channel_mix"))
+    parsed["thirty_day_experiments"] = _as_object_list(parsed.get("thirty_day_experiments"))
+    parsed["risks_and_countermoves"] = _as_object_list(parsed.get("risks_and_countermoves"))
+
+  elif action == "build_roadmap":
+    parsed["timeline_weeks"] = _coerce_int(parsed.get("timeline_weeks"), default=12, minimum=2, maximum=104)
+    phases = []
+    for item in _as_object_list(parsed.get("phases")):
+      phases.append(
+        {
+          "phase_name": str(item.get("phase_name") or "").strip(),
+          "start_week": _coerce_int(item.get("start_week"), default=1, minimum=1, maximum=104),
+          "end_week": _coerce_int(item.get("end_week"), default=1, minimum=1, maximum=104),
+          "goal": str(item.get("goal") or "").strip(),
+          "key_topics": _as_string_list(item.get("key_topics")),
+          "milestones": _as_string_list(item.get("milestones")),
+          "deliverables": _as_string_list(item.get("deliverables")),
+          "success_criteria": _as_string_list(item.get("success_criteria")),
+        }
+      )
+    parsed["phases"] = phases
+
+    weekly_plan = []
+    for item in _as_object_list(parsed.get("weekly_plan")):
+      focus = str(item.get("focus") or "").strip()
+      topics = _as_string_list(item.get("topics"))
+      tasks = _as_string_list(item.get("tasks"))
+      if not topics and tasks:
+        topics = tasks[:3]
+      if not topics and focus:
+        topics = [focus]
+      weekly_plan.append(
+        {
+          "week": _coerce_int(item.get("week"), default=1, minimum=1, maximum=104),
+          "focus": focus,
+          "topics": topics,
+          "tasks": tasks,
+          "time_budget_hours": _coerce_int(item.get("time_budget_hours"), default=0, minimum=0, maximum=80),
+          "output": str(item.get("output") or "").strip(),
+        }
+      )
+    parsed["weekly_plan"] = weekly_plan
+    parsed["burnout_guardrails"] = _as_string_list(parsed.get("burnout_guardrails"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    if not isinstance(parsed.get("application_strategy"), dict):
+      parsed["application_strategy"] = {}
+    if not isinstance(parsed.get("review_cadence"), dict):
+      parsed["review_cadence"] = {}
+
+  elif action == "weekly_checkin":
+    parsed["week_number"] = _coerce_int(parsed.get("week_number"), default=1, minimum=1, maximum=520)
+    parsed["progress_score"] = _coerce_int(parsed.get("progress_score"), default=0, minimum=0, maximum=100)
+    parsed["completed_topics"] = _as_string_list(
+      parsed.get("completed_topics") or normalized_payload.get("completed_topics")
+    )
+    parsed["matched_roadmap_topics"] = _as_string_list(
+      parsed.get("matched_roadmap_topics") or normalized_payload.get("matched_roadmap_topics")
+    )
+    parsed["unmatched_topics"] = _as_string_list(
+      parsed.get("unmatched_topics") or normalized_payload.get("unmatched_topics")
+    )
+    parsed["topic_alignment_note"] = str(parsed.get("topic_alignment_note") or "").strip()
+    if not parsed["topic_alignment_note"]:
+      if parsed["unmatched_topics"]:
+        parsed["topic_alignment_note"] = "Some completed topics are outside this week's roadmap scope."
+      else:
+        parsed["topic_alignment_note"] = "Completed topics align with this week's roadmap focus."
+    parsed["wins"] = _as_string_list(parsed.get("wins"))
+    parsed["next_week_plan"] = _as_string_list(parsed.get("next_week_plan"))
+    parsed["escalate_if"] = _as_string_list(parsed.get("escalate_if"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["blockers"] = _as_object_list(parsed.get("blockers"))
+    parsed["plan_adjustments"] = _as_object_list(parsed.get("plan_adjustments"))
+
+  elif action == "interview_readiness":
+    parsed["readiness_score"] = _coerce_int(parsed.get("readiness_score"), default=0, minimum=0, maximum=100)
+    parsed["technical_round_plan"] = _as_string_list(parsed.get("technical_round_plan"))
+    parsed["behavioral_round_plan"] = _as_string_list(parsed.get("behavioral_round_plan"))
+    parsed["negotiation_prep"] = _as_string_list(parsed.get("negotiation_prep"))
+    parsed["final_30_day_checklist"] = _as_string_list(parsed.get("final_30_day_checklist"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["readiness_breakdown"] = _as_object_list(parsed.get("readiness_breakdown"))
+    parsed["top_question_themes"] = _as_object_list(parsed.get("top_question_themes"))
+    parsed["story_bank"] = _as_object_list(parsed.get("story_bank"))
+    parsed["mock_schedule"] = _as_object_list(parsed.get("mock_schedule"))
+
+  parsed["action"] = action
+  parsed.setdefault("status", "ok")
+  return json.dumps(parsed, ensure_ascii=False)
+
+
+def _assess_career_profile(profile_json: str) -> str:
+  """Run intake assessment for the Career Coach agent."""
+  payload = _parse_json_payload(profile_json)
+  return _generate_career_coach_response("intake_assessment", payload)
+
+
+def _analyze_career_opportunity_strategy(
+  profile_json: str,
+  target_role: str = "",
+  job_description: str = "",
+) -> str:
+  """Build a role-market opportunity strategy against a target role."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  if job_description:
+    payload["job_description"] = job_description
+  return _generate_career_coach_response("opportunity_strategy", payload)
+
+
+def _analyze_career_skill_gap(
+  profile_json: str,
+  target_role: str = "",
+  job_description: str = "",
+) -> str:
+  """Backward-compatible alias for legacy skill-gap action naming."""
+  return _analyze_career_opportunity_strategy(
+    profile_json=profile_json,
+    target_role=target_role,
+    job_description=job_description,
+  )
+
+
+def _generate_career_roadmap(
+  profile_json: str,
+  target_role: str = "",
+  timeline_weeks: int = 12,
+  weekly_hours: int = 6,
+) -> str:
+  """Generate a structured career execution roadmap."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  payload["timeline_weeks"] = timeline_weeks
+  payload["weekly_hours"] = weekly_hours
+  return _generate_career_coach_response("build_roadmap", payload)
+
+
+def _evaluate_weekly_career_progress(checkin_json: str) -> str:
+  """Evaluate weekly execution progress and return course corrections."""
+  payload = _parse_json_payload(checkin_json)
+  return _generate_career_coach_response("weekly_checkin", payload)
+
+
+def _create_interview_readiness_plan(
+  profile_json: str,
+  target_role: str = "",
+  interview_types: str = "",
+) -> str:
+  """Assess interview readiness and produce a focused prep plan."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  if interview_types:
+    payload["interview_types"] = _normalize_string_list(interview_types)
+  return _generate_career_coach_response("interview_readiness", payload)
+
+
+def _skill_gap_agent_error(action: str, code: str, message: str) -> str:
+  """Return a stable JSON error payload for Skill Gap agent flows."""
+  return json.dumps(
+    {
+      "action": action,
+      "status": "error",
+      "error": code,
+      "message": message,
+    },
+    ensure_ascii=False,
+  )
+
+
+def _generate_skill_gap_agent_response(action: str, payload: dict) -> str:
+  """
+  Generate structured JSON outputs for Skill Gap agent actions.
+
+  Supported actions:
+    - profile_baseline
+    - identify_skill_gaps
+    - build_development_plan
+    - weekly_progress_checkin
+    - readiness_assessment
+  """
+  from app.services.gemini import GeminiClient
+
+  action = (action or "").strip().lower()
+  allowed_actions = {
+    "profile_baseline",
+    "identify_skill_gaps",
+    "build_development_plan",
+    "weekly_progress_checkin",
+    "readiness_assessment",
+  }
+  if action not in allowed_actions:
+    return _skill_gap_agent_error(
+      action=action or "unknown",
+      code="invalid_action",
+      message="Unsupported skill gap action.",
+    )
+
+  payload = payload if isinstance(payload, dict) else {}
+  normalized_payload = dict(payload)
+
+  list_like_keys = [
+    "current_skills",
+    "target_skills",
+    "constraints",
+    "focus_areas",
+    "projects",
+    "learning_preferences",
+    "role_expectations",
+    "completed_activities",
+    "blocked_activities",
+    "wins",
+    "support_needed",
+    "evidence_links",
+    "manager_feedback",
+    "peer_feedback",
+  ]
+  for key in list_like_keys:
+    if key in normalized_payload:
+      normalized_payload[key] = _normalize_string_list(normalized_payload.get(key))
+
+  if "years_experience" in normalized_payload:
+    normalized_payload["years_experience"] = _coerce_int(
+      normalized_payload.get("years_experience"), default=0, minimum=0, maximum=50
+    )
+  if "timeline_weeks" in normalized_payload:
+    normalized_payload["timeline_weeks"] = _coerce_int(
+      normalized_payload.get("timeline_weeks"), default=12, minimum=2, maximum=104
+    )
+  if "weekly_learning_hours" in normalized_payload:
+    normalized_payload["weekly_learning_hours"] = _coerce_int(
+      normalized_payload.get("weekly_learning_hours"), default=5, minimum=1, maximum=80
+    )
+  if "week_number" in normalized_payload:
+    normalized_payload["week_number"] = _coerce_int(
+      normalized_payload.get("week_number"), default=1, minimum=1, maximum=520
+    )
+  if "learning_hours_spent" in normalized_payload:
+    normalized_payload["learning_hours_spent"] = _coerce_int(
+      normalized_payload.get("learning_hours_spent"), default=0, minimum=0, maximum=120
+    )
+
+  if action in {"identify_skill_gaps", "build_development_plan", "readiness_assessment"}:
+    target_role = str(normalized_payload.get("target_role") or "").strip()
+    if not target_role:
+      return _skill_gap_agent_error(
+        action=action,
+        code="target_role_required",
+        message="target_role is required for this action.",
+      )
+
+  if action == "profile_baseline":
+    has_content = (
+      bool(str(normalized_payload.get("current_role") or "").strip())
+      or bool(str(normalized_payload.get("target_role") or "").strip())
+      or bool(normalized_payload.get("current_skills"))
+      or bool(normalized_payload.get("projects"))
+      or bool(str(normalized_payload.get("performance_notes") or "").strip())
+    )
+    if not has_content:
+      return _skill_gap_agent_error(
+        action=action,
+        code="insufficient_input",
+        message=(
+          "Provide at least one of current_role, target_role, current_skills, "
+          "projects, or performance_notes."
+        ),
+      )
+
+  schema_by_action = {
+    "profile_baseline": """{
+  "action": "profile_baseline",
+  "status": "ok",
+  "profile_summary": "string",
+  "current_capability_snapshot": [
+    { "skill": "string", "current_level": "string", "evidence": "string" }
+  ],
+  "strengths": ["string"],
+  "risks": ["string"],
+  "focus_areas": ["string"],
+  "manager_alignment_questions": ["string"],
+  "confidence_score": 0,
+  "assumptions": ["string"]
+}""",
+    "identify_skill_gaps": """{
+  "action": "identify_skill_gaps",
+  "status": "ok",
+  "target_role": "string",
+  "overall_gap_score": 0,
+  "critical_skill_gaps": [
+    {
+      "skill": "string",
+      "priority": "high|medium|low",
+      "current_level": "string",
+      "target_level": "string",
+      "business_impact": "string",
+      "development_recommendation": "string"
+    }
+  ],
+  "adjacent_skills_to_build": ["string"],
+  "role_expectation_keywords": ["string"],
+  "quick_wins": ["string"],
+  "manager_support_requests": ["string"],
+  "assumptions": ["string"]
+}""",
+    "build_development_plan": """{
+  "action": "build_development_plan",
+  "status": "ok",
+  "target_role": "string",
+  "timeline_weeks": 0,
+  "plan_summary": "string",
+  "phases": [
+    {
+      "phase_name": "string",
+      "start_week": 0,
+      "end_week": 0,
+      "goal": "string",
+      "deliverables": ["string"],
+      "activities": ["string"],
+      "success_criteria": ["string"]
+    }
+  ],
+  "weekly_learning_plan": [
+    {
+      "week": 0,
+      "focus": "string",
+      "activities": ["string"],
+      "time_budget_hours": 0,
+      "evidence_output": "string"
+    }
+  ],
+  "enablement_resources": [
+    { "resource_type": "course|mentor|project|reading|practice", "name": "string", "purpose": "string", "estimated_hours": 0 }
+  ],
+  "manager_checkpoints": [
+    { "week": 0, "agenda": "string", "expected_outcomes": ["string"] }
+  ],
+  "risk_mitigation": ["string"],
+  "assumptions": ["string"]
+}""",
+    "weekly_progress_checkin": """{
+  "action": "weekly_progress_checkin",
+  "status": "ok",
+  "week_number": 0,
+  "progress_score": 0,
+  "trajectory": "on_track|at_risk|off_track",
+  "wins": ["string"],
+  "blockers": [
+    { "blocker": "string", "impact": "string", "next_step": "string", "owner": "string" }
+  ],
+  "plan_adjustments": [
+    { "change": "string", "reason": "string", "effective_week": 0 }
+  ],
+  "next_week_priorities": ["string"],
+  "support_needed": ["string"],
+  "assumptions": ["string"]
+}""",
+    "readiness_assessment": """{
+  "action": "readiness_assessment",
+  "status": "ok",
+  "target_role": "string",
+  "readiness_score": 0,
+  "competency_breakdown": [
+    { "competency": "string", "score": 0, "gap": "string", "evidence_needed": "string" }
+  ],
+  "strongest_signals": ["string"],
+  "remaining_gaps": ["string"],
+  "thirty_day_focus": ["string"],
+  "stakeholder_alignment_plan": ["string"],
+  "decision_risks": ["string"],
+  "assumptions": ["string"]
+}""",
+  }
+
+  action_guidance = {
+    "profile_baseline": (
+      "Build an objective baseline of current capabilities and readiness risks using only the provided context."
+    ),
+    "identify_skill_gaps": (
+      "Prioritize missing skills by business impact and expected role outcomes. Focus on what closes gaps fastest."
+    ),
+    "build_development_plan": (
+      "Create a practical, time-bound upskilling plan for a working employee with measurable weekly outputs."
+    ),
+    "weekly_progress_checkin": (
+      "Assess progress honestly, identify blockers concretely, and propose specific plan adjustments."
+    ),
+    "readiness_assessment": (
+      "Evaluate promotion or role-readiness across competencies and define the shortest path to close remaining gaps."
+    ),
+  }
+
+  prompt = "\n".join(
+    [
+      "You are an expert Skill Gap Agent for employees.",
+      "You produce structured, execution-focused development guidance.",
+      "Avoid generic advice and avoid motivational filler.",
+      "",
+      f"ACTION: {action}",
+      "",
+      "INPUT PAYLOAD (JSON):",
+      json.dumps(normalized_payload, ensure_ascii=False, indent=2),
+      "",
+      "RESPONSE CONTRACT:",
+      "- Return ONLY one valid JSON object.",
+      "- Do not add markdown fences or explanatory text outside JSON.",
+      "- Do not use placeholders (no <...>, no [insert ...]).",
+      "- Recommendations must be grounded in the payload and role expectations.",
+      "- Keep outputs concise, practical, and measurable.",
+      "",
+      "ACTION-SPECIFIC GUIDANCE:",
+      action_guidance[action],
+      "",
+      "JSON SCHEMA (keys must match exactly):",
+      schema_by_action[action],
+    ]
+  )
+
+  try:
+    gemini_client = GeminiClient()
+    content = gemini_client.generate_response(
+      system_prompt=(
+        "You are a structured workforce capability engine. "
+        "Return strict JSON only, following the requested schema exactly."
+      ),
+      messages=[{"role": "user", "content": prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.3,
+    )
+  except Exception as e:
+    return _skill_gap_agent_error(
+      action=action,
+      code="generation_failed",
+      message=f"Failed to generate skill gap response: {str(e)}",
+    )
+
+  if not content:
+    return _skill_gap_agent_error(
+      action=action,
+      code="empty_response",
+      message="Model returned an empty response.",
+    )
+
+  candidate = _extract_first_json_object(content.strip())
+  if not candidate:
+    return _skill_gap_agent_error(
+      action=action,
+      code="invalid_json",
+      message="Model response did not contain a valid JSON object.",
+    )
+
+  try:
+    parsed = json.loads(candidate)
+  except Exception:
+    return _skill_gap_agent_error(
+      action=action,
+      code="invalid_json",
+      message="Model response was not valid JSON.",
+    )
+
+  if not isinstance(parsed, dict):
+    return _skill_gap_agent_error(
+      action=action,
+      code="invalid_schema",
+      message="Model response must be a JSON object.",
+    )
+
+  def _as_string_list(value) -> List[str]:
+    if isinstance(value, list):
+      return [str(item).strip() for item in value if str(item).strip()]
+    return _normalize_string_list(value)
+
+  def _as_object_list(value) -> List[dict]:
+    if not isinstance(value, list):
+      return []
+    return [item for item in value if isinstance(item, dict)]
+
+  if action == "profile_baseline":
+    parsed["strengths"] = _as_string_list(parsed.get("strengths"))
+    parsed["risks"] = _as_string_list(parsed.get("risks"))
+    parsed["focus_areas"] = _as_string_list(parsed.get("focus_areas"))
+    parsed["manager_alignment_questions"] = _as_string_list(parsed.get("manager_alignment_questions"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["confidence_score"] = _coerce_int(parsed.get("confidence_score"), default=0, minimum=0, maximum=100)
+    capability_items = []
+    for item in _as_object_list(parsed.get("current_capability_snapshot")):
+      capability_items.append(
+        {
+          "skill": str(item.get("skill") or "").strip(),
+          "current_level": str(item.get("current_level") or "").strip(),
+          "evidence": str(item.get("evidence") or "").strip(),
+        }
+      )
+    parsed["current_capability_snapshot"] = capability_items
+
+  elif action == "identify_skill_gaps":
+    parsed["overall_gap_score"] = _coerce_int(parsed.get("overall_gap_score"), default=0, minimum=0, maximum=100)
+    parsed["adjacent_skills_to_build"] = _as_string_list(parsed.get("adjacent_skills_to_build"))
+    parsed["role_expectation_keywords"] = _as_string_list(parsed.get("role_expectation_keywords"))
+    parsed["quick_wins"] = _as_string_list(parsed.get("quick_wins"))
+    parsed["manager_support_requests"] = _as_string_list(parsed.get("manager_support_requests"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    critical_gaps = []
+    for item in _as_object_list(parsed.get("critical_skill_gaps")):
+      critical_gaps.append(
+        {
+          "skill": str(item.get("skill") or "").strip(),
+          "priority": str(item.get("priority") or "").strip(),
+          "current_level": str(item.get("current_level") or "").strip(),
+          "target_level": str(item.get("target_level") or "").strip(),
+          "business_impact": str(item.get("business_impact") or "").strip(),
+          "development_recommendation": str(item.get("development_recommendation") or "").strip(),
+        }
+      )
+    parsed["critical_skill_gaps"] = critical_gaps
+
+  elif action == "build_development_plan":
+    parsed["timeline_weeks"] = _coerce_int(parsed.get("timeline_weeks"), default=12, minimum=2, maximum=104)
+    parsed["phases"] = _as_object_list(parsed.get("phases"))
+    parsed["weekly_learning_plan"] = _as_object_list(parsed.get("weekly_learning_plan"))
+    parsed["enablement_resources"] = _as_object_list(parsed.get("enablement_resources"))
+    parsed["manager_checkpoints"] = _as_object_list(parsed.get("manager_checkpoints"))
+    parsed["risk_mitigation"] = _as_string_list(parsed.get("risk_mitigation"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+
+  elif action == "weekly_progress_checkin":
+    parsed["week_number"] = _coerce_int(parsed.get("week_number"), default=1, minimum=1, maximum=520)
+    parsed["progress_score"] = _coerce_int(parsed.get("progress_score"), default=0, minimum=0, maximum=100)
+    parsed["wins"] = _as_string_list(parsed.get("wins"))
+    parsed["next_week_priorities"] = _as_string_list(parsed.get("next_week_priorities"))
+    parsed["support_needed"] = _as_string_list(parsed.get("support_needed"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    parsed["blockers"] = _as_object_list(parsed.get("blockers"))
+    parsed["plan_adjustments"] = _as_object_list(parsed.get("plan_adjustments"))
+
+  elif action == "readiness_assessment":
+    parsed["readiness_score"] = _coerce_int(parsed.get("readiness_score"), default=0, minimum=0, maximum=100)
+    parsed["strongest_signals"] = _as_string_list(parsed.get("strongest_signals"))
+    parsed["remaining_gaps"] = _as_string_list(parsed.get("remaining_gaps"))
+    parsed["thirty_day_focus"] = _as_string_list(parsed.get("thirty_day_focus"))
+    parsed["stakeholder_alignment_plan"] = _as_string_list(parsed.get("stakeholder_alignment_plan"))
+    parsed["decision_risks"] = _as_string_list(parsed.get("decision_risks"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    competency_breakdown = []
+    for item in _as_object_list(parsed.get("competency_breakdown")):
+      competency_breakdown.append(
+        {
+          "competency": str(item.get("competency") or "").strip(),
+          "score": _coerce_int(item.get("score"), default=0, minimum=0, maximum=100),
+          "gap": str(item.get("gap") or "").strip(),
+          "evidence_needed": str(item.get("evidence_needed") or "").strip(),
+        }
+      )
+    parsed["competency_breakdown"] = competency_breakdown
+
+  parsed["action"] = action
+  parsed.setdefault("status", "ok")
+  return json.dumps(parsed, ensure_ascii=False)
+
+
+def _build_skill_gap_baseline(profile_json: str) -> str:
+  """Create a current-state capability baseline for an employee."""
+  payload = _parse_json_payload(profile_json)
+  return _generate_skill_gap_agent_response("profile_baseline", payload)
+
+
+def _identify_employee_skill_gaps(
+  profile_json: str,
+  target_role: str = "",
+  role_expectations: str = "",
+) -> str:
+  """Identify prioritized skill gaps for a target role."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  if role_expectations:
+    payload["role_expectations"] = _normalize_string_list(role_expectations)
+  return _generate_skill_gap_agent_response("identify_skill_gaps", payload)
+
+
+def _build_skill_development_plan(
+  profile_json: str,
+  target_role: str = "",
+  timeline_weeks: int = 12,
+  weekly_learning_hours: int = 5,
+) -> str:
+  """Build a structured upskilling plan for an employee."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  payload["timeline_weeks"] = timeline_weeks
+  payload["weekly_learning_hours"] = weekly_learning_hours
+  return _generate_skill_gap_agent_response("build_development_plan", payload)
+
+
+def _run_skill_gap_weekly_checkin(checkin_json: str) -> str:
+  """Evaluate weekly execution progress for the skill development plan."""
+  payload = _parse_json_payload(checkin_json)
+  return _generate_skill_gap_agent_response("weekly_progress_checkin", payload)
+
+
+def _assess_skill_readiness(
+  profile_json: str,
+  target_role: str = "",
+) -> str:
+  """Assess readiness for the target role using capability evidence."""
+  payload = _parse_json_payload(profile_json)
+  if target_role:
+    payload["target_role"] = target_role
+  return _generate_skill_gap_agent_response("readiness_assessment", payload)
+
+
 def get_tools_for_agent_slug(slug: str) -> List[Tool]:
   """Return LangChain tools enabled for a given prebuilt agent slug."""
   tools: List[Tool] = []
@@ -2130,6 +3277,113 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
       )
     )
 
+  elif slug == PREBUILT_AGENT_SLUGS["career_coach_agent"]:
+    tools.append(
+      Tool(
+        name="assess_career_profile",
+        func=_assess_career_profile,
+        description=(
+          "Run a structured intake assessment for a working professional and return JSON with "
+          "career positioning, priorities, risks, and metrics. "
+          "Args: profile_json (str, JSON object with profile/context fields)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="analyze_career_opportunity_strategy",
+        func=_analyze_career_opportunity_strategy,
+        description=(
+          "Build role-market opportunity strategy against a target role and return prioritized JSON output. "
+          "Args: profile_json (str), target_role (str, optional), job_description (str, optional)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="generate_career_roadmap",
+        func=_generate_career_roadmap,
+        description=(
+          "Generate a measurable weekly career roadmap with milestones and application strategy. "
+          "Args: profile_json (str), target_role (str, optional), timeline_weeks (int, default=12), "
+          "weekly_hours (int, default=6)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="evaluate_weekly_career_progress",
+        func=_evaluate_weekly_career_progress,
+        description=(
+          "Evaluate weekly progress and produce JSON with blockers, adjustments, and next-week plan. "
+          "Args: checkin_json (str, JSON object with weekly execution details)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="create_interview_readiness_plan",
+        func=_create_interview_readiness_plan,
+        description=(
+          "Assess interview readiness for a target role and return a focused preparation plan in JSON. "
+          "Args: profile_json (str), target_role (str, optional), interview_types (str, comma-separated, optional)."
+        ),
+      )
+    )
+
+  elif slug == PREBUILT_AGENT_SLUGS["skill_gap_agent"]:
+    tools.append(
+      Tool(
+        name="build_skill_gap_baseline",
+        func=_build_skill_gap_baseline,
+        description=(
+          "Build a current-state capability baseline for an employee and return structured JSON. "
+          "Args: profile_json (str, JSON object with employee profile/context fields)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="identify_employee_skill_gaps",
+        func=_identify_employee_skill_gaps,
+        description=(
+          "Identify and prioritize employee skill gaps for a target role. "
+          "Args: profile_json (str), target_role (str, optional), role_expectations (str, comma-separated, optional)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="build_skill_development_plan",
+        func=_build_skill_development_plan,
+        description=(
+          "Create a time-bound skill development plan with weekly outcomes and manager checkpoints. "
+          "Args: profile_json (str), target_role (str, optional), timeline_weeks (int, default=12), "
+          "weekly_learning_hours (int, default=5)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="run_skill_gap_weekly_checkin",
+        func=_run_skill_gap_weekly_checkin,
+        description=(
+          "Evaluate weekly progress on the development plan and return blockers and adjustments in JSON. "
+          "Args: checkin_json (str, JSON object with weekly execution details)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="assess_skill_readiness",
+        func=_assess_skill_readiness,
+        description=(
+          "Assess readiness for a target role across core competencies and return structured JSON. "
+          "Args: profile_json (str), target_role (str, optional)."
+        ),
+      )
+    )
+
   elif slug == PREBUILT_AGENT_SLUGS["resume_review_agent"]:
     tools.append(
       Tool(
@@ -2146,4 +3400,3 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
     )
 
   return tools
-

@@ -48,6 +48,18 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/agents/:agentId/career-coach',
+      name: 'CareerCoach',
+      component: () => import('@/views/CareerCoach.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/agents/:agentId/skill-gap',
+      name: 'SkillGap',
+      component: () => import('@/views/SkillGap.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/agents/:agentId/course-creation',
       name: 'CourseCreation',
       component: () => import('@/views/CourseCreation.vue'),
@@ -91,4 +103,3 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
-

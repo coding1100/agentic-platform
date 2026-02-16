@@ -488,6 +488,143 @@ class LangchainAgentService:
           validation_criteria=validation_criteria,
         )
 
+    # Structured, tool-driven flow for Skill Gap Agent.
+    # The frontend sends workflow actions in JSON payloads using:
+    #   SKILL_GAP_REQUEST
+    #   { "action": "...", "payload": { ... } }
+    if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS.get("skill_gap_agent"):
+      import json
+      from app.tools.prebuilt_agents import _generate_skill_gap_agent_response
+
+      text = latest_input or ""
+      marker = "SKILL_GAP_REQUEST"
+      marker_used = marker in text
+
+      if marker_used:
+        json_start = text.find("{", text.find(marker))
+        if json_start != -1:
+          payload_str = text[json_start:].strip()
+          try:
+            payload = json.loads(payload_str)
+          except Exception:
+            payload = {}
+        else:
+          payload = {}
+      else:
+        try:
+          payload = json.loads(text)
+        except Exception:
+          payload = {}
+
+      action = ""
+      action_payload = {}
+      if isinstance(payload, dict):
+        action = str(payload.get("action") or "").strip().lower()
+        if isinstance(payload.get("payload"), dict):
+          action_payload = dict(payload.get("payload") or {})
+        else:
+          action_payload = dict(payload)
+          action_payload.pop("action", None)
+
+      if action in {
+        "profile_baseline",
+        "identify_skill_gaps",
+        "build_development_plan",
+        "weekly_progress_checkin",
+        "readiness_assessment",
+      }:
+        try:
+          return _generate_skill_gap_agent_response(action=action, payload=action_payload)
+        except Exception as e:
+          import traceback
+          print(f"Skill gap tool failed: {traceback.format_exc()}")
+          return (
+            '{"action":"'
+            + action
+            + '","status":"error","error":"internal_error","message":"'
+            + str(e).replace('"', '\\"')
+            + '"}'
+          )
+
+      if marker_used:
+        return (
+          '{"action":"unknown","status":"error","error":"invalid_payload",'
+          '"message":"SKILL_GAP_REQUEST must include a valid action."}'
+        )
+
+    # Structured, tool-driven flow for Career Coach Agent.
+    # The frontend sends workflow actions in JSON payloads using:
+    #   CAREER_COACH_REQUEST
+    #   { "action": "...", "payload": { ... } }
+    # Backward-compatible flat payloads are also accepted.
+    if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS.get("career_coach_agent"):
+      import json
+      from app.tools.prebuilt_agents import _generate_career_coach_response
+
+      text = latest_input or ""
+      marker = "CAREER_COACH_REQUEST"
+      marker_used = marker in text
+
+      if marker_used:
+        json_start = text.find("{", text.find(marker))
+        if json_start != -1:
+          payload_str = text[json_start:].strip()
+          try:
+            payload = json.loads(payload_str)
+          except Exception:
+            payload = {}
+        else:
+          payload = {}
+      else:
+        # Fallback for direct JSON requests.
+        try:
+          payload = json.loads(text)
+        except Exception:
+          payload = {}
+
+      action = ""
+      action_payload = {}
+      if isinstance(payload, dict):
+        action = str(payload.get("action") or "").strip().lower()
+        if isinstance(payload.get("payload"), dict):
+          action_payload = dict(payload.get("payload") or {})
+          # Allow mixed payloads where some fields are still top-level.
+          for key, value in payload.items():
+            if key in {"action", "payload"}:
+              continue
+            action_payload.setdefault(key, value)
+        else:
+          action_payload = dict(payload)
+          action_payload.pop("action", None)
+
+      if action in {
+        "intake_assessment",
+        "opportunity_strategy",
+        "skill_gap_analysis",
+        "build_roadmap",
+        "weekly_checkin",
+        "interview_readiness",
+      }:
+        try:
+          return _generate_career_coach_response(action=action, payload=action_payload)
+        except Exception as e:
+          import traceback
+          print(f"Career coach tool failed: {traceback.format_exc()}")
+          return (
+            '{"action":"'
+            + action
+            + '","status":"error","error":"internal_error","message":"'
+            + str(e).replace('"', '\\"')
+            + '"}'
+          )
+
+      # If user sent the structured marker but payload/action is invalid, fail fast.
+      if marker_used:
+        return (
+          '{"action":"unknown","status":"error","error":"invalid_payload",'
+          '"message":"CAREER_COACH_REQUEST must include a valid action."}'
+        )
+
     # Structured, tool-driven flow for Resume Review Agent.
     # This agent is NOT a free-form chatbot: the frontend sends structured payloads
     # (JSON) and we delegate directly to the resume review tool for deterministic output.
