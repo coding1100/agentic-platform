@@ -12,6 +12,7 @@ from app.models.message import Message, MessageRole
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.agent import AgentResponse
 from app.services.langchain_client import LangchainAgentService
+from app.services.prebuilt_agents import ensure_prebuilt_agents_seeded
 from datetime import datetime
 
 router = APIRouter()
@@ -23,6 +24,8 @@ def list_public_agents(
     db: Session = Depends(get_db)
 ):
     """List all available prebuilt agents (public API)."""
+    ensure_prebuilt_agents_seeded(db)
+
     current_user, api_key = user_and_key
     
     # If agent_id is null, return all prebuilt agents (universal key)
@@ -50,6 +53,8 @@ def get_public_agent(
     db: Session = Depends(get_db)
 ):
     """Get a specific agent by slug (public API)."""
+    ensure_prebuilt_agents_seeded(db)
+
     current_user, api_key = user_and_key
     
     # Find the agent by slug
@@ -83,6 +88,8 @@ def public_chat(
     db: Session = Depends(get_db)
 ):
     """Send a message to an agent via public API (using agent slug)."""
+    ensure_prebuilt_agents_seeded(db)
+
     current_user, api_key = user_and_key
     
     # Find the agent by slug
@@ -210,6 +217,8 @@ def create_public_conversation(
     db: Session = Depends(get_db)
 ):
     """Create a new conversation for an agent (public API)."""
+    ensure_prebuilt_agents_seeded(db)
+
     current_user, api_key = user_and_key
     
     # Find the agent by slug

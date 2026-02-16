@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.agent import Agent
 from app.schemas.agent import AgentCreate, AgentUpdate, AgentResponse
+from app.services.prebuilt_agents import ensure_prebuilt_agents_seeded
 
 router = APIRouter()
 
@@ -17,6 +18,8 @@ async def list_agents(
     db: Session = Depends(get_db)
 ):
     """List all agents for the current user."""
+    ensure_prebuilt_agents_seeded(db)
+
     # User-owned agents
     user_agents = db.query(Agent).filter(Agent.user_id == current_user.id).all()
 

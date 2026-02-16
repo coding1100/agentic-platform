@@ -549,3 +549,18 @@ def seed_prebuilt_agents(db: Session) -> None:
 
   db.commit()
 
+
+def ensure_prebuilt_agents_seeded(db: Session) -> None:
+  """Self-heal helper to guarantee all expected prebuilt agents are active."""
+  expected_slugs = set(PREBUILT_AGENT_SLUGS.values())
+  active_prebuilt_slugs = {
+    slug
+    for (slug,) in db.query(Agent.slug).filter(
+      Agent.is_prebuilt.is_(True),
+      Agent.is_active.is_(True),
+      Agent.slug.isnot(None),
+    ).all()
+  }
+
+  if not expected_slugs.issubset(active_prebuilt_slugs):
+    seed_prebuilt_agents(db)
