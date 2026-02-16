@@ -594,7 +594,13 @@
               <button
                 @click="copyToClipboard(JSON.stringify({
   conversation_id: null,
-  message: 'RESUME_REVIEW_REQUEST\\n{ \"action\": \"review_resume\", \"resume_text\": \"Paste resume text here\", \"job_description\": \"Optional job description\", \"target_role\": \"Senior Backend Engineer\", \"seniority\": \"mid\" }'
+  message: 'RESUME_REVIEW_REQUEST\\n' + JSON.stringify({
+    action: 'review_resume',
+    resume_text: 'Paste resume text here',
+    job_description: 'Optional job description',
+    target_role: 'Senior Backend Engineer',
+    seniority: 'mid'
+  })
 }, null, 2), false)"
                 class="btn-copy-inline"
               >
