@@ -7,7 +7,13 @@ import type {
   ChatResponse,
   ApiKey,
   ApiKeyCreate,
-  ApiKeyUsageStats
+  ApiKeyUpdate,
+  ApiKeyUsageStats,
+  EmbedDeployment,
+  EmbedDeploymentUpsert,
+  RealtimeSession,
+  RealtimeTokenRequest,
+  RealtimeTokenResponse,
 } from '@/types'
 
 const defaultBaseUrl =
@@ -16,38 +22,44 @@ const defaultBaseUrl =
     : (typeof window !== 'undefined' ? window.location.origin : '')
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || defaultBaseUrl
 
-const apiClient: AxiosInstance = axios.create({
+const createdClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
 })
+const apiClient: AxiosInstance = (createdClient || (axios as unknown as AxiosInstance))
 
 // Request interceptor to add auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+if ((apiClient as any).interceptors?.request?.use) {
+  apiClient.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('token')
+      if (token) {
+        config.headers = config.headers || {}
+        ;(config.headers as any).Authorization = `Bearer ${token}`
+      }
+      return config
+    },
+    (error) => {
+      return Promise.reject(error)
     }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
+  )
+}
 
 // Response interceptor to handle errors
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+if ((apiClient as any).interceptors?.response?.use) {
+  apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+      }
+      return Promise.reject(error)
     }
-    return Promise.reject(error)
-  }
-)
+  )
+}
 
 export const authApi = {
   async login(data: { email: string; password: string }) {
@@ -87,8 +99,14 @@ export const agentsApi = {
     name: string
     description?: string
     system_prompt: string
+    greeting_message?: string
     model?: string
     temperature?: number
+    interaction_mode?: 'chat' | 'avatar_realtime'
+    livekit_agent_name?: string | null
+    avatar_provider?: string | null
+    avatar_id?: string | null
+    realtime_config?: Record<string, any> | null
   }): Promise<Agent> {
     const response = await apiClient.post('/api/v1/agents', data)
     return response.data
@@ -224,6 +242,35 @@ export const stateApi = {
 
   async save(namespace: string, data: Record<string, any>): Promise<UserStateResponse> {
     const response = await apiClient.put(`/api/v1/state/${encodeURIComponent(namespace)}`, { data })
+    return response.data
+  }
+}
+
+export const realtimeApi = {
+  async upsertEmbedDeployment(agentId: string, data: EmbedDeploymentUpsert): Promise<EmbedDeployment> {
+    const response = await apiClient.put(`/api/v1/realtime/agents/${agentId}/embed`, data)
+    return response.data
+  },
+
+  async getEmbedDeployment(agentId: string): Promise<EmbedDeployment> {
+    const response = await apiClient.get(`/api/v1/realtime/agents/${agentId}/embed`)
+    return response.data
+  },
+
+  async createAgentToken(agentId: string, data: RealtimeTokenRequest): Promise<RealtimeTokenResponse> {
+    const response = await apiClient.post(`/api/v1/realtime/agents/${agentId}/token`, data)
+    return response.data
+  },
+
+  async listSessions(agentId: string, limit: number = 50): Promise<RealtimeSession[]> {
+    const response = await apiClient.get(`/api/v1/realtime/agents/${agentId}/sessions`, {
+      params: { limit }
+    })
+    return response.data
+  },
+
+  async endSession(sessionId: string): Promise<RealtimeSession> {
+    const response = await apiClient.post(`/api/v1/realtime/sessions/${sessionId}/end`)
     return response.data
   }
 }

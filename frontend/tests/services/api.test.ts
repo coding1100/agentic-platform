@@ -28,10 +28,7 @@ describe('API Client', () => {
 
     it('should signup', async () => {
       const mockResponse = { data: { id: '1', email: 'test@example.com', created_at: '2024-01-01' } }
-      mockedAxios.create.mockReturnValue({
-        post: vi.fn().mockResolvedValue(mockResponse),
-        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-      })
+      mockedAxios.post.mockResolvedValue(mockResponse)
 
       const result = await authApi.signup({ email: 'test@example.com', password: 'password' })
 
@@ -40,10 +37,7 @@ describe('API Client', () => {
 
     it('should get current user', async () => {
       const mockResponse = { data: { id: '1', email: 'test@example.com', created_at: '2024-01-01' } }
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-      })
+      mockedAxios.get.mockResolvedValue(mockResponse)
 
       const result = await authApi.getCurrentUser()
 
@@ -54,10 +48,7 @@ describe('API Client', () => {
   describe('agentsApi', () => {
     it('should list agents', async () => {
       const mockResponse = { data: [{ id: '1', name: 'Agent' }] }
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-      })
+      mockedAxios.get.mockResolvedValue(mockResponse)
 
       const result = await agentsApi.list()
 
@@ -66,10 +57,7 @@ describe('API Client', () => {
 
     it('should create agent', async () => {
       const mockResponse = { data: { id: '1', name: 'New Agent' } }
-      mockedAxios.create.mockReturnValue({
-        post: vi.fn().mockResolvedValue(mockResponse),
-        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-      })
+      mockedAxios.post.mockResolvedValue(mockResponse)
 
       const result = await agentsApi.create({ name: 'New Agent', system_prompt: 'Prompt' })
 
@@ -86,10 +74,7 @@ describe('API Client', () => {
           agent_id: '1'
         }
       }
-      mockedAxios.create.mockReturnValue({
-        post: vi.fn().mockResolvedValue(mockResponse),
-        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }
-      })
+      mockedAxios.post.mockResolvedValue(mockResponse)
 
       const result = await chatApi.sendMessage('1', { message: 'Hello' })
 

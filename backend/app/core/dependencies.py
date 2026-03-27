@@ -35,8 +35,13 @@ async def get_current_user(
     if payload is None:
         raise credentials_exception
 
-    user_id: str = payload.get("sub")
-    if user_id is None:
+    user_id_raw: str = payload.get("sub")
+    if user_id_raw is None:
+        raise credentials_exception
+
+    try:
+        user_id = UUID(str(user_id_raw))
+    except Exception:
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()

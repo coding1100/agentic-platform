@@ -9,6 +9,9 @@
         <button @click="goToDocumentation" class="btn-secondary-header">
           📚 Documentation
         </button>
+        <button @click="goToAvatarEmbeds" class="btn-secondary-header">
+          Avatar Embeds
+        </button>
         <button @click="showCreateModal = true" class="btn-primary">
           + Create API Key
         </button>
@@ -479,6 +482,10 @@ function goBack() {
 
 function goToDocumentation() {
   router.push('/api-keys/documentation')
+}
+
+function goToAvatarEmbeds() {
+  router.push('/avatar-embeds')
 }
 
 function closeCreateModal() {

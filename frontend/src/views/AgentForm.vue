@@ -2,7 +2,7 @@
   <div class="agent-form-container">
     <div class="agent-form-card">
       <h1>{{ isEdit ? 'Edit Agent' : 'Create New Agent' }}</h1>
-      
+
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="name">Agent Name *</label>
@@ -28,6 +28,33 @@
         </div>
 
         <div class="form-group">
+          <label for="interaction_mode">Interaction Mode *</label>
+          <select id="interaction_mode" v-model="form.interaction_mode">
+            <option value="chat">Chat</option>
+            <option value="avatar_realtime">Avatar Realtime (LiveKit)</option>
+          </select>
+          <small class="hint">Use Avatar Realtime for low-latency A/V interview flows.</small>
+        </div>
+
+        <div v-if="form.interaction_mode === 'avatar_realtime'" class="realtime-group">
+          <h3>Realtime Configuration</h3>
+
+          <div class="form-group">
+            <label for="livekit_agent_name">LiveKit Agent Name *</label>
+            <input
+              id="livekit_agent_name"
+              v-model="form.livekit_agent_name"
+              type="text"
+              placeholder="avatar-interview-agent"
+              maxlength="200"
+              required
+            />
+            <small class="hint">Must match the worker registration name.</small>
+          </div>
+          <small class="hint">Avatar is rendered in the browser. No external avatar provider setup required.</small>
+        </div>
+
+        <div class="form-group">
           <label for="system_prompt">System Prompt *</label>
           <textarea
             id="system_prompt"
@@ -48,7 +75,7 @@
             rows="4"
             maxlength="2000"
           />
-          <small class="hint">This message will be automatically sent when a user starts a new conversation with this agent.</small>
+          <small class="hint">This message is sent when users start a new conversation.</small>
         </div>
 
         <div class="form-group">
@@ -95,7 +122,9 @@ const form = ref({
   description: '',
   system_prompt: '',
   greeting_message: '',
-  temperature: 0.7
+  temperature: 0.7,
+  interaction_mode: 'chat' as 'chat' | 'avatar_realtime',
+  livekit_agent_name: ''
 })
 
 onMounted(async () => {
@@ -104,20 +133,22 @@ onMounted(async () => {
     isEdit.value = true
     const result = await agentsStore.fetchAgent(agentId)
     if (result.success && result.agent) {
-      // Prevent editing pre-built agents
       if (result.agent.is_prebuilt) {
         error.value = 'Pre-built agents cannot be edited'
         setTimeout(() => {
           router.push('/dashboard')
-        }, 2000)
+        }, 1500)
         return
       }
+
       form.value = {
         name: result.agent.name,
         description: result.agent.description || '',
         system_prompt: result.agent.system_prompt,
         greeting_message: result.agent.greeting_message || '',
-        temperature: result.agent.temperature
+        temperature: result.agent.temperature,
+        interaction_mode: result.agent.interaction_mode || 'chat',
+        livekit_agent_name: result.agent.livekit_agent_name || ''
       }
     }
   }
@@ -125,12 +156,33 @@ onMounted(async () => {
 
 async function handleSubmit() {
   error.value = ''
+
+  if (form.value.interaction_mode === 'avatar_realtime' && !form.value.livekit_agent_name.trim()) {
+    error.value = 'LiveKit agent name is required for avatar realtime mode.'
+    return
+  }
+
   loading.value = true
+
+  const payload: any = {
+    name: form.value.name,
+    description: form.value.description || null,
+    system_prompt: form.value.system_prompt,
+    greeting_message: form.value.greeting_message || null,
+    temperature: form.value.temperature,
+    interaction_mode: form.value.interaction_mode
+  }
+
+  if (form.value.interaction_mode === 'avatar_realtime') {
+    payload.livekit_agent_name = form.value.livekit_agent_name.trim()
+    payload.avatar_provider = 'browser'
+    payload.avatar_id = null
+  }
 
   const agentId = route.params.agentId as string
   const result = isEdit.value
-    ? await agentsStore.updateAgent(agentId, form.value)
-    : await agentsStore.createAgent(form.value)
+    ? await agentsStore.updateAgent(agentId, payload)
+    : await agentsStore.createAgent(payload)
 
   if (result.success) {
     router.push('/dashboard')
@@ -155,26 +207,11 @@ function goBack() {
   position: relative;
 }
 
-.agent-form-container::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: 
-    radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(255, 119, 198, 0.3) 0%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
-}
-
 .agent-form-card {
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
   border-radius: 24px;
   padding: 48px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -188,7 +225,25 @@ h1 {
   margin-bottom: 36px;
   font-size: 32px;
   font-weight: 700;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.realtime-group {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.realtime-group h3 {
+  margin: 0 0 12px;
+  color: white;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .form-group {
@@ -203,11 +258,11 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 14px 18px;
   background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 12px;
   font-size: 16px;
@@ -216,17 +271,21 @@ textarea {
   transition: all 0.3s ease;
 }
 
+select option {
+  color: #111827;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgba(255, 255, 255, 0.6);
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: none;
   border-color: rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 textarea {
@@ -247,24 +306,24 @@ textarea {
   margin-top: 36px;
 }
 
-.btn-primary {
+.btn-primary,
+.btn-secondary {
   padding: 14px 28px;
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10px);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 12px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.35);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
 .btn-primary:disabled {
@@ -273,32 +332,32 @@ textarea {
 }
 
 .btn-secondary {
-  padding: 14px 28px;
   background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
 }
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
 }
 
 .error-message {
-  color: #ff6b6b;
+  color: #ffd7d7;
   margin-bottom: 15px;
   padding: 12px;
-  background: rgba(255, 107, 107, 0.2);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 107, 107, 0.3);
+  background: rgba(220, 38, 38, 0.28);
+  border: 1px solid rgba(254, 202, 202, 0.5);
   border-radius: 10px;
   font-size: 14px;
 }
-</style>
 
+@media (max-width: 768px) {
+  .agent-form-card {
+    padding: 22px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

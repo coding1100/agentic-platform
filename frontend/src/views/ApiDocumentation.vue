@@ -49,7 +49,7 @@
             </div>
               <p class="docs-note">
                 Replace <code>{agent_slug}</code> with your agent's slug.
-                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>, <code>career.resume_review_agent</code>, <code>career.career_coach_agent</code>, <code>career.skill_gap_agent</code>
+                Available agents: <code>education.personal_tutor</code>, <code>education.course_creation_agent</code>, <code>education.language_practice_agent</code>, <code>education.micro_learning_agent</code>, <code>education.exam_prep_agent</code>, <code>career.resume_review_agent</code>, <code>career.career_coach_agent</code>, <code>career.skill_gap_agent</code>, <code>health.fitness_coach_agent</code>
               </p>
 
             <h3>Authentication</h3>
@@ -1501,6 +1501,13 @@ Headers: {
     "slug": "career.resume_review_agent",
     "description": "ATS-optimized resume review agent with structured feedback...",
     "category": "career"
+  },
+  {
+    "id": "uuid",
+    "name": "Fitness Coach Agent",
+    "slug": "health.fitness_coach_agent",
+    "description": "Adaptive workout coaching with weekly feedback-driven adjustments...",
+    "category": "health"
   },
   // ... more agents
 ]`

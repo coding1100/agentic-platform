@@ -55,6 +55,11 @@ export interface Agent {
   slug?: string
   is_prebuilt?: boolean
   category?: string
+  interaction_mode?: 'chat' | 'avatar_realtime'
+  livekit_agent_name?: string | null
+  avatar_provider?: string | null
+  avatar_id?: string | null
+  realtime_config?: Record<string, any> | null
 }
 
 export interface Conversation {
@@ -84,5 +89,65 @@ export interface ChatResponse {
   conversation_id: string
   message: string
   agent_id: string
+}
+
+export interface RealtimeTokenRequest {
+  room_name?: string | null
+  participant_identity?: string | null
+  participant_name?: string | null
+  participant_metadata?: string | null
+  participant_attributes?: Record<string, string> | null
+  room_config?: Record<string, any> | null
+  origin_hint?: string | null
+}
+
+export interface RealtimeTokenResponse {
+  server_url: string
+  participant_token: string
+  room_name: string
+  participant_identity: string
+  participant_name: string
+  expires_at: string
+  agent_id: string
+  session_id: string
+  embed_id?: string | null
+}
+
+export interface EmbedDeployment {
+  id: string
+  user_id: string
+  agent_id: string
+  embed_id: string
+  is_active: boolean
+  allowed_origins?: string[] | null
+  token_ttl_seconds: number
+  max_concurrent_sessions: number
+  room_name_prefix?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EmbedDeploymentUpsert {
+  is_active: boolean
+  allowed_origins?: string[] | null
+  token_ttl_seconds?: number | null
+  max_concurrent_sessions?: number | null
+  room_name_prefix?: string | null
+}
+
+export interface RealtimeSession {
+  id: string
+  user_id: string
+  agent_id: string
+  embed_deployment_id?: string | null
+  room_name: string
+  participant_identity: string
+  participant_name?: string | null
+  status: string
+  expires_at?: string | null
+  ended_at?: string | null
+  session_metadata?: Record<string, any> | null
+  created_at: string
+  updated_at: string
 }
 

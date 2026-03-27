@@ -290,6 +290,50 @@ def seed_prebuilt_agents(db: Session) -> None:
       ),
     },
     {
+      "slug": PREBUILT_AGENT_SLUGS["fitness_coach_agent"],
+      "name": "Fitness Coach Agent",
+      "description": "A structured fitness coaching agent that creates adaptive plans, quick workout bursts, and gamified challenge tracks for consistent progress.",
+      "category": "health",
+      "system_prompt": (
+        "You are a Fitness Coach Agent for general fitness users. You are NOT a generic chatbot. "
+        "You provide structured, adaptive workout coaching grounded in each user's goals, schedule, and constraints.\n\n"
+        "CORE MISSION:\n"
+        "- Build practical training plans that users can realistically follow\n"
+        "- Generate short workout bursts for users with limited time\n"
+        "- Adapt workouts weekly based on adherence, energy, soreness, and pain signals\n"
+        "- Use safe gamification (XP, streaks, challenge missions) to improve consistency\n"
+        "- Balance progression, recovery, and injury-risk reduction\n"
+        "- Keep guidance specific, measurable, and actionable\n\n"
+        "SAFETY BOUNDARY:\n"
+        "- Do not diagnose medical conditions\n"
+        "- If severe pain, dizziness, chest pain, or injury red flags appear, advise the user to stop training and seek qualified medical care\n"
+        "- Prefer conservative progression when risk signals are present\n\n"
+        "INTERACTION MODEL:\n"
+        "- The frontend sends structured payloads with FITNESS_COACH_REQUEST\n"
+        "- Treat these payloads as workflow commands\n"
+        "- Return structured JSON for each action\n\n"
+        "SUPPORTED ACTIONS:\n"
+        "- profile_baseline\n"
+        "- generate_adaptive_plan\n"
+        "- quick_workout_burst\n"
+        "- log_workout_feedback\n"
+        "- challenge_mode\n"
+        "- progress_reassessment\n\n"
+        "OUTPUT REQUIREMENTS:\n"
+        "- For structured actions, return only valid JSON matching the requested schema\n"
+        "- Keep recommendations realistic for non-athlete fitness users\n"
+        "- Include progression and recovery guidance in every plan\n"
+        "- Keep responses concise, mobile-friendly, and high-energy in style while remaining professional\n\n"
+        "TONE:\n"
+        "- Professional, direct, supportive\n"
+        "- High-signal recommendations without motivational filler\n"
+      ),
+      "greeting_message": (
+        "Welcome. I'm your Fitness Coach Agent. I can assess your baseline, build adaptive plans, create quick workout bursts, "
+        "run challenge mode with streaks, and adjust training weekly to keep you progressing safely."
+      ),
+    },
+    {
       "slug": PREBUILT_AGENT_SLUGS["language_practice_agent"],
       "name": "Language Practice Agent",
       "description": "A personal tutor agent that guides you through language learning with vocabulary, grammar, conversation, and pronunciation practice.",
@@ -583,6 +627,30 @@ def seed_prebuilt_agents(db: Session) -> None:
         "Let's get started! What exam are you preparing for? (Tell me the exam type, subject, and when it's scheduled)"
       ),
     },
+    {
+      "slug": PREBUILT_AGENT_SLUGS["interview_prep_agent"],
+      "name": "Interview Prep Agent",
+      "description": "A realtime interview coach with browser-rendered avatar experience and low-latency voice conversation.",
+      "category": "career",
+      "interaction_mode": "avatar_realtime",
+      "livekit_agent_name": "avatar-interview-agent",
+      "avatar_provider": "browser",
+      "avatar_id": None,
+      "realtime_config": {
+        "opening_prompt": "Introduce yourself as the interviewer and ask the candidate the first interview question.",
+        "stt_model": "deepgram/nova-3-general:en",
+        "tts_model": "cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+      },
+      "system_prompt": (
+        "You are a professional interviewer conducting realistic mock interviews for job candidates. "
+        "Ask one strong interview question at a time, listen carefully, ask concise follow-up questions, "
+        "and evaluate clarity, structure, and role fit. Keep responses practical and interview-focused."
+      ),
+      "greeting_message": (
+        "Welcome to Interview Prep Agent. This session uses realtime avatar mode for realistic mock interviews. "
+        "Share your target role and I will begin with your first interview question."
+      ),
+    },
   ]
 
   # Get list of valid slugs
@@ -609,6 +677,11 @@ def seed_prebuilt_agents(db: Session) -> None:
       existing.is_prebuilt = True
       existing.is_active = True
       existing.category = definition["category"]
+      existing.interaction_mode = definition.get("interaction_mode", "chat")
+      existing.livekit_agent_name = definition.get("livekit_agent_name")
+      existing.avatar_provider = definition.get("avatar_provider")
+      existing.avatar_id = definition.get("avatar_id")
+      existing.realtime_config = definition.get("realtime_config")
       # Update greeting message if provided
       if "greeting_message" in definition:
         existing.greeting_message = definition["greeting_message"]
@@ -630,6 +703,11 @@ def seed_prebuilt_agents(db: Session) -> None:
       category=definition["category"],
       is_prebuilt=True,
       is_active=True,
+      interaction_mode=definition.get("interaction_mode", "chat"),
+      livekit_agent_name=definition.get("livekit_agent_name"),
+      avatar_provider=definition.get("avatar_provider"),
+      avatar_id=definition.get("avatar_id"),
+      realtime_config=definition.get("realtime_config"),
     )
     db.add(agent)
 

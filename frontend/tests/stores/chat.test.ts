@@ -17,7 +17,7 @@ vi.mock('@/services/api', () => ({
 describe('Chat Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   it('should fetch conversations', async () => {
@@ -86,8 +86,21 @@ describe('Chat Store', () => {
       message: 'Response message',
       agent_id: '1'
     }
+    const refreshedConversation = {
+      id: '1',
+      agent_id: '1',
+      user_id: '1',
+      title: 'Conv',
+      created_at: '2024-01-01',
+      updated_at: '2024-01-01',
+      messages: [
+        { id: '1', conversation_id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01' },
+        { id: '2', conversation_id: '1', role: 'assistant', content: 'Response message', created_at: '2024-01-01' }
+      ]
+    }
 
     vi.mocked(chatApi.sendMessage).mockResolvedValue(mockResponse)
+    vi.mocked(conversationsApi.get).mockResolvedValue(refreshedConversation)
 
     const result = await store.sendMessage('1', 'Hello', undefined)
 

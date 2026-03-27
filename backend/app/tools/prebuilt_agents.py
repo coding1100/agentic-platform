@@ -9,9 +9,11 @@ PREBUILT_AGENT_SLUGS = {
   "language_practice_agent": "education.language_practice_agent",
   "micro_learning_agent": "education.micro_learning_agent",
   "exam_prep_agent": "education.exam_prep_agent",
+  "interview_prep_agent": "career.interview_prep_agent",
   "resume_review_agent": "career.resume_review_agent",
   "career_coach_agent": "career.career_coach_agent",
   "skill_gap_agent": "career.skill_gap_agent",
+  "fitness_coach_agent": "health.fitness_coach_agent",
 }
 
 
@@ -2970,6 +2972,687 @@ def _assess_skill_readiness(
   return _generate_skill_gap_agent_response("readiness_assessment", payload)
 
 
+def _fitness_coach_error(action: str, code: str, message: str) -> str:
+  """Return a stable JSON error payload for Fitness Coach flows."""
+  return json.dumps(
+    {
+      "action": action,
+      "status": "error",
+      "error": code,
+      "message": message,
+    },
+    ensure_ascii=False,
+  )
+
+
+def _generate_fitness_coach_response(action: str, payload: dict) -> str:
+  """
+  Generate structured JSON outputs for Fitness Coach agent actions.
+
+  Supported actions:
+    - profile_baseline
+    - generate_adaptive_plan
+    - quick_workout_burst
+    - log_workout_feedback
+    - challenge_mode
+    - progress_reassessment
+  """
+  from app.services.gemini import GeminiClient
+
+  action = (action or "").strip().lower()
+  allowed_actions = {
+    "profile_baseline",
+    "generate_adaptive_plan",
+    "quick_workout_burst",
+    "log_workout_feedback",
+    "challenge_mode",
+    "progress_reassessment",
+  }
+  if action not in allowed_actions:
+    return _fitness_coach_error(
+      action=action or "unknown",
+      code="invalid_action",
+      message="Unsupported fitness coach action.",
+    )
+
+  payload = payload if isinstance(payload, dict) else {}
+  normalized_payload = dict(payload)
+
+  list_like_keys = [
+    "equipment_available",
+    "constraints",
+    "injury_history",
+    "preferred_workouts",
+    "disliked_exercises",
+    "available_days",
+    "completed_sessions",
+    "pain_points",
+    "wins",
+    "performance_notes",
+    "tracked_metrics",
+    "challenge_preferences",
+    "content_style",
+  ]
+  for key in list_like_keys:
+    if key in normalized_payload:
+      normalized_payload[key] = _normalize_string_list(normalized_payload.get(key))
+
+  if "age" in normalized_payload:
+    normalized_payload["age"] = _coerce_int(
+      normalized_payload.get("age"), default=30, minimum=13, maximum=90
+    )
+  if "height_cm" in normalized_payload:
+    normalized_payload["height_cm"] = _coerce_int(
+      normalized_payload.get("height_cm"), default=170, minimum=100, maximum=240
+    )
+  if "weight_kg" in normalized_payload:
+    normalized_payload["weight_kg"] = _coerce_int(
+      normalized_payload.get("weight_kg"), default=70, minimum=30, maximum=300
+    )
+  if "workout_days_per_week" in normalized_payload:
+    normalized_payload["workout_days_per_week"] = _coerce_int(
+      normalized_payload.get("workout_days_per_week"), default=4, minimum=1, maximum=7
+    )
+  if "session_duration_minutes" in normalized_payload:
+    normalized_payload["session_duration_minutes"] = _coerce_int(
+      normalized_payload.get("session_duration_minutes"), default=45, minimum=10, maximum=180
+    )
+  if "timeline_weeks" in normalized_payload:
+    normalized_payload["timeline_weeks"] = _coerce_int(
+      normalized_payload.get("timeline_weeks"), default=8, minimum=2, maximum=52
+    )
+  if "week_number" in normalized_payload:
+    normalized_payload["week_number"] = _coerce_int(
+      normalized_payload.get("week_number"), default=1, minimum=1, maximum=520
+    )
+  if "energy_level" in normalized_payload:
+    normalized_payload["energy_level"] = _coerce_int(
+      normalized_payload.get("energy_level"), default=6, minimum=1, maximum=10
+    )
+  if "soreness_level" in normalized_payload:
+    normalized_payload["soreness_level"] = _coerce_int(
+      normalized_payload.get("soreness_level"), default=4, minimum=1, maximum=10
+    )
+  if "sleep_hours" in normalized_payload:
+    normalized_payload["sleep_hours"] = _coerce_int(
+      normalized_payload.get("sleep_hours"), default=7, minimum=0, maximum=14
+    )
+  if "adherence_percent" in normalized_payload:
+    normalized_payload["adherence_percent"] = _coerce_int(
+      normalized_payload.get("adherence_percent"), default=0, minimum=0, maximum=100
+    )
+  if "time_available_minutes" in normalized_payload:
+    normalized_payload["time_available_minutes"] = _coerce_int(
+      normalized_payload.get("time_available_minutes"), default=20, minimum=5, maximum=90
+    )
+  if "challenge_duration_days" in normalized_payload:
+    normalized_payload["challenge_duration_days"] = _coerce_int(
+      normalized_payload.get("challenge_duration_days"), default=7, minimum=3, maximum=60
+    )
+  if "current_streak_days" in normalized_payload:
+    normalized_payload["current_streak_days"] = _coerce_int(
+      normalized_payload.get("current_streak_days"), default=0, minimum=0, maximum=720
+    )
+
+  if action in {"generate_adaptive_plan", "challenge_mode", "progress_reassessment"}:
+    primary_goal = str(normalized_payload.get("primary_goal") or "").strip()
+    if not primary_goal:
+      return _fitness_coach_error(
+        action=action,
+        code="primary_goal_required",
+        message="primary_goal is required for this action.",
+      )
+
+  if action == "profile_baseline":
+    has_context = any(
+      bool(str(normalized_payload.get(key) or "").strip())
+      for key in ["primary_goal", "fitness_level", "experience_level"]
+    ) or bool(normalized_payload.get("equipment_available"))
+    if not has_context:
+      return _fitness_coach_error(
+        action=action,
+        code="insufficient_input",
+        message="Provide at least primary_goal, fitness_level, or equipment_available.",
+      )
+
+  if action == "log_workout_feedback":
+    completed_sessions = _normalize_string_list(normalized_payload.get("completed_sessions"))
+    normalized_payload["completed_sessions"] = completed_sessions
+    if not completed_sessions:
+      return _fitness_coach_error(
+        action=action,
+        code="completed_sessions_required",
+        message="completed_sessions is required for workout feedback adaptation.",
+      )
+    if not isinstance(normalized_payload.get("plan_report"), dict):
+      return _fitness_coach_error(
+        action=action,
+        code="plan_report_required",
+        message="plan_report is required for workout feedback adaptation.",
+      )
+
+  if action == "quick_workout_burst":
+    time_available = _coerce_int(
+      normalized_payload.get("time_available_minutes"), default=20, minimum=5, maximum=90
+    )
+    normalized_payload["time_available_minutes"] = time_available
+    normalized_payload.setdefault("workout_location", "home")
+
+  if action == "challenge_mode":
+    if not str(normalized_payload.get("challenge_name") or "").strip():
+      normalized_payload["challenge_name"] = "Momentum Challenge"
+    normalized_payload["challenge_duration_days"] = _coerce_int(
+      normalized_payload.get("challenge_duration_days"), default=7, minimum=3, maximum=60
+    )
+
+  schema_by_action = {
+    "profile_baseline": """{
+  "action": "profile_baseline",
+  "status": "ok",
+  "profile_summary": "string",
+  "training_readiness_score": 0,
+  "risk_flags": ["string"],
+  "recommended_focus_areas": ["string"],
+  "weekly_training_target": {
+    "sessions": 0,
+    "minutes_per_session": 0,
+    "intensity_distribution": { "easy": 0, "moderate": 0, "hard": 0 }
+  },
+  "mobility_priorities": ["string"],
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "assumptions": ["string"]
+}""",
+    "generate_adaptive_plan": """{
+  "action": "generate_adaptive_plan",
+  "status": "ok",
+  "primary_goal": "string",
+  "timeline_weeks": 0,
+  "plan_summary": "string",
+  "weekly_schedule": [
+    {
+      "day": "string",
+      "focus": "string",
+      "session_type": "strength|cardio|mobility|recovery|mixed",
+      "duration_minutes": 0,
+      "intensity": "low|moderate|high",
+      "workout_blocks": ["string"],
+      "progression_note": "string"
+    }
+  ],
+  "progression_strategy": ["string"],
+  "exercise_substitutions": [
+    {
+      "movement_pattern": "string",
+      "preferred_option": "string",
+      "backup_option": "string",
+      "when_to_use": "string"
+    }
+  ],
+  "music_vibe_recommendations": ["string"],
+  "recovery_protocol": ["string"],
+  "safety_notes": ["string"],
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "share_card_text": "string",
+  "assumptions": ["string"]
+}""",
+    "quick_workout_burst": """{
+  "action": "quick_workout_burst",
+  "status": "ok",
+  "time_available_minutes": 0,
+  "workout_location": "home|gym|outdoors",
+  "workout_title": "string",
+  "format": "circuit|emom|amrap|interval",
+  "warmup": ["string"],
+  "main_set": [
+    { "block_name": "string", "duration_minutes": 0, "instructions": ["string"] }
+  ],
+  "cooldown": ["string"],
+  "intensity_target": "low|moderate|high",
+  "equipment_substitutions": ["string"],
+  "safety_notes": ["string"],
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "share_card_text": "string",
+  "assumptions": ["string"]
+}""",
+    "log_workout_feedback": """{
+  "action": "log_workout_feedback",
+  "status": "ok",
+  "week_number": 0,
+  "adherence_score": 0,
+  "fatigue_status": "recovered|manageable|overreached",
+  "what_went_well": ["string"],
+  "friction_points": ["string"],
+  "plan_adjustments": [
+    { "change": "string", "reason": "string", "effective_from": "string" }
+  ],
+  "next_week_schedule_tweaks": ["string"],
+  "deload_recommendation": "string",
+  "injury_risk_alerts": ["string"],
+  "coach_message": "string",
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "social_accountability_prompt": "string",
+  "share_card_text": "string",
+  "assumptions": ["string"]
+}""",
+    "challenge_mode": """{
+  "action": "challenge_mode",
+  "status": "ok",
+  "challenge_name": "string",
+  "challenge_duration_days": 0,
+  "primary_goal": "string",
+  "daily_missions": [
+    { "day": 0, "mission": "string", "duration_minutes": 0, "difficulty": "easy|medium|hard" }
+  ],
+  "weekly_bonus_tasks": ["string"],
+  "streak_rules": ["string"],
+  "reward_track": [
+    { "milestone_day": 0, "reward": "string", "unlock_criteria": "string" }
+  ],
+  "friend_challenge_prompt": "string",
+  "safety_notes": ["string"],
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "share_card_text": "string",
+  "assumptions": ["string"]
+}""",
+    "progress_reassessment": """{
+  "action": "progress_reassessment",
+  "status": "ok",
+  "goal_progress_score": 0,
+  "goal_progress_summary": "string",
+  "metric_trends": [
+    { "metric": "string", "baseline": "string", "current": "string", "trend": "up|flat|down" }
+  ],
+  "plateau_diagnosis": ["string"],
+  "next_30_day_focus": ["string"],
+  "updated_targets": [
+    { "metric": "string", "target": "string", "deadline": "string" }
+  ],
+  "accountability_checkpoints": ["string"],
+  "gamification": {
+    "xp_awarded": 0,
+    "streak_delta": 0,
+    "level_estimate": 0,
+    "badges_unlocked": ["string"],
+    "quest_prompt": "string"
+  },
+  "share_card_text": "string",
+  "assumptions": ["string"]
+}""",
+  }
+
+  action_guidance = {
+    "profile_baseline": (
+      "Assess readiness conservatively, flag realistic risks, and define a sustainable weekly target."
+    ),
+    "generate_adaptive_plan": (
+      "Generate a practical and adaptive weekly training schedule based on time, equipment, and constraints."
+    ),
+    "quick_workout_burst": (
+      "Generate a short, high-adherence workout for limited time windows and include substitutions."
+    ),
+    "log_workout_feedback": (
+      "Adjust the next-week plan using adherence, fatigue, pain points, and completed sessions."
+    ),
+    "challenge_mode": (
+      "Design a challenge with daily missions, streak logic, and reward milestones that stays realistic and safe."
+    ),
+    "progress_reassessment": (
+      "Evaluate progress against the goal and provide a focused 30-day adaptation strategy."
+    ),
+  }
+
+  prompt = "\n".join(
+    [
+      "You are an expert Fitness Coach for general fitness users.",
+      "You design adaptive workout guidance that is practical, safe, and progression-focused.",
+      "Do not provide medical diagnosis or treatment. If serious pain/injury signs appear, advise professional care.",
+      "",
+      f"ACTION: {action}",
+      "",
+      "INPUT PAYLOAD (JSON):",
+      json.dumps(normalized_payload, ensure_ascii=False, indent=2),
+      "",
+      "RESPONSE CONTRACT:",
+      "- Return ONLY one valid JSON object.",
+      "- Do not add markdown fences or explanatory text outside JSON.",
+      "- Do not use placeholders (no <...>, no [insert ...]).",
+      "- Keep recommendations specific and measurable.",
+      "",
+      "ACTION-SPECIFIC GUIDANCE:",
+      action_guidance[action],
+      "",
+      "JSON SCHEMA (keys must match exactly):",
+      schema_by_action[action],
+    ]
+  )
+
+  try:
+    gemini_client = GeminiClient()
+    content = gemini_client.generate_response(
+      system_prompt=(
+        "You are a structured fitness planning engine. "
+        "Return strict JSON only, following the requested schema exactly."
+      ),
+      messages=[{"role": "user", "content": prompt}],
+      model="gemini-2.5-pro",
+      temperature=0.3,
+    )
+  except Exception as e:
+    return _fitness_coach_error(
+      action=action,
+      code="generation_failed",
+      message=f"Failed to generate fitness coach response: {str(e)}",
+    )
+
+  if not content:
+    return _fitness_coach_error(
+      action=action,
+      code="empty_response",
+      message="Model returned an empty response.",
+    )
+
+  candidate = _extract_first_json_object(content.strip())
+  if not candidate:
+    return _fitness_coach_error(
+      action=action,
+      code="invalid_json",
+      message="Model response did not contain a valid JSON object.",
+    )
+
+  try:
+    parsed = json.loads(candidate)
+  except Exception:
+    return _fitness_coach_error(
+      action=action,
+      code="invalid_json",
+      message="Model response was not valid JSON.",
+    )
+
+  if not isinstance(parsed, dict):
+    return _fitness_coach_error(
+      action=action,
+      code="invalid_schema",
+      message="Model response must be a JSON object.",
+    )
+
+  def _as_string_list(value) -> List[str]:
+    if isinstance(value, list):
+      return [str(item).strip() for item in value if str(item).strip()]
+    return _normalize_string_list(value)
+
+  def _as_object_list(value) -> List[dict]:
+    if not isinstance(value, list):
+      return []
+    return [item for item in value if isinstance(item, dict)]
+
+  def _normalize_gamification(value: dict | None) -> dict:
+    source = value if isinstance(value, dict) else {}
+    return {
+      "xp_awarded": _coerce_int(source.get("xp_awarded"), default=0, minimum=0, maximum=10000),
+      "streak_delta": _coerce_int(source.get("streak_delta"), default=0, minimum=-7, maximum=30),
+      "level_estimate": _coerce_int(source.get("level_estimate"), default=1, minimum=1, maximum=200),
+      "badges_unlocked": _as_string_list(source.get("badges_unlocked")),
+      "quest_prompt": str(source.get("quest_prompt") or "").strip(),
+    }
+
+  if action == "profile_baseline":
+    parsed["training_readiness_score"] = _coerce_int(
+      parsed.get("training_readiness_score"), default=0, minimum=0, maximum=100
+    )
+    parsed["risk_flags"] = _as_string_list(parsed.get("risk_flags"))
+    parsed["recommended_focus_areas"] = _as_string_list(parsed.get("recommended_focus_areas"))
+    parsed["mobility_priorities"] = _as_string_list(parsed.get("mobility_priorities"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    weekly_target = parsed.get("weekly_training_target")
+    if not isinstance(weekly_target, dict):
+      weekly_target = {}
+    intensity_distribution = weekly_target.get("intensity_distribution")
+    if not isinstance(intensity_distribution, dict):
+      intensity_distribution = {}
+    parsed["weekly_training_target"] = {
+      "sessions": _coerce_int(weekly_target.get("sessions"), default=0, minimum=0, maximum=14),
+      "minutes_per_session": _coerce_int(weekly_target.get("minutes_per_session"), default=0, minimum=0, maximum=240),
+      "intensity_distribution": {
+        "easy": _coerce_int(intensity_distribution.get("easy"), default=0, minimum=0, maximum=100),
+        "moderate": _coerce_int(intensity_distribution.get("moderate"), default=0, minimum=0, maximum=100),
+        "hard": _coerce_int(intensity_distribution.get("hard"), default=0, minimum=0, maximum=100),
+      },
+    }
+
+  elif action == "generate_adaptive_plan":
+    parsed["timeline_weeks"] = _coerce_int(parsed.get("timeline_weeks"), default=8, minimum=2, maximum=52)
+    parsed["progression_strategy"] = _as_string_list(parsed.get("progression_strategy"))
+    parsed["music_vibe_recommendations"] = _as_string_list(parsed.get("music_vibe_recommendations"))
+    parsed["recovery_protocol"] = _as_string_list(parsed.get("recovery_protocol"))
+    parsed["safety_notes"] = _as_string_list(parsed.get("safety_notes"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["share_card_text"] = str(parsed.get("share_card_text") or "").strip()
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    weekly_schedule = []
+    for item in _as_object_list(parsed.get("weekly_schedule")):
+      weekly_schedule.append(
+        {
+          "day": str(item.get("day") or "").strip(),
+          "focus": str(item.get("focus") or "").strip(),
+          "session_type": str(item.get("session_type") or "").strip(),
+          "duration_minutes": _coerce_int(item.get("duration_minutes"), default=45, minimum=10, maximum=180),
+          "intensity": str(item.get("intensity") or "").strip(),
+          "workout_blocks": _as_string_list(item.get("workout_blocks")),
+          "progression_note": str(item.get("progression_note") or "").strip(),
+        }
+      )
+    parsed["weekly_schedule"] = weekly_schedule
+    substitutions = []
+    for item in _as_object_list(parsed.get("exercise_substitutions")):
+      substitutions.append(
+        {
+          "movement_pattern": str(item.get("movement_pattern") or "").strip(),
+          "preferred_option": str(item.get("preferred_option") or "").strip(),
+          "backup_option": str(item.get("backup_option") or "").strip(),
+          "when_to_use": str(item.get("when_to_use") or "").strip(),
+        }
+      )
+    parsed["exercise_substitutions"] = substitutions
+
+  elif action == "quick_workout_burst":
+    parsed["time_available_minutes"] = _coerce_int(
+      parsed.get("time_available_minutes"), default=20, minimum=5, maximum=90
+    )
+    parsed["warmup"] = _as_string_list(parsed.get("warmup"))
+    parsed["cooldown"] = _as_string_list(parsed.get("cooldown"))
+    parsed["equipment_substitutions"] = _as_string_list(parsed.get("equipment_substitutions"))
+    parsed["safety_notes"] = _as_string_list(parsed.get("safety_notes"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["share_card_text"] = str(parsed.get("share_card_text") or "").strip()
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    blocks = []
+    for item in _as_object_list(parsed.get("main_set")):
+      blocks.append(
+        {
+          "block_name": str(item.get("block_name") or "").strip(),
+          "duration_minutes": _coerce_int(item.get("duration_minutes"), default=5, minimum=1, maximum=60),
+          "instructions": _as_string_list(item.get("instructions")),
+        }
+      )
+    parsed["main_set"] = blocks
+
+  elif action == "log_workout_feedback":
+    parsed["week_number"] = _coerce_int(parsed.get("week_number"), default=1, minimum=1, maximum=520)
+    parsed["adherence_score"] = _coerce_int(parsed.get("adherence_score"), default=0, minimum=0, maximum=100)
+    parsed["what_went_well"] = _as_string_list(parsed.get("what_went_well"))
+    parsed["friction_points"] = _as_string_list(parsed.get("friction_points"))
+    parsed["next_week_schedule_tweaks"] = _as_string_list(parsed.get("next_week_schedule_tweaks"))
+    parsed["injury_risk_alerts"] = _as_string_list(parsed.get("injury_risk_alerts"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["social_accountability_prompt"] = str(parsed.get("social_accountability_prompt") or "").strip()
+    parsed["share_card_text"] = str(parsed.get("share_card_text") or "").strip()
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    adjustments = []
+    for item in _as_object_list(parsed.get("plan_adjustments")):
+      adjustments.append(
+        {
+          "change": str(item.get("change") or "").strip(),
+          "reason": str(item.get("reason") or "").strip(),
+          "effective_from": str(item.get("effective_from") or "").strip(),
+        }
+      )
+    parsed["plan_adjustments"] = adjustments
+
+  elif action == "challenge_mode":
+    parsed["challenge_duration_days"] = _coerce_int(
+      parsed.get("challenge_duration_days"), default=7, minimum=3, maximum=60
+    )
+    parsed["weekly_bonus_tasks"] = _as_string_list(parsed.get("weekly_bonus_tasks"))
+    parsed["streak_rules"] = _as_string_list(parsed.get("streak_rules"))
+    parsed["safety_notes"] = _as_string_list(parsed.get("safety_notes"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["share_card_text"] = str(parsed.get("share_card_text") or "").strip()
+    parsed["friend_challenge_prompt"] = str(parsed.get("friend_challenge_prompt") or "").strip()
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    missions = []
+    for item in _as_object_list(parsed.get("daily_missions")):
+      missions.append(
+        {
+          "day": _coerce_int(item.get("day"), default=1, minimum=1, maximum=365),
+          "mission": str(item.get("mission") or "").strip(),
+          "duration_minutes": _coerce_int(item.get("duration_minutes"), default=20, minimum=5, maximum=90),
+          "difficulty": str(item.get("difficulty") or "").strip(),
+        }
+      )
+    parsed["daily_missions"] = missions
+    reward_track = []
+    for item in _as_object_list(parsed.get("reward_track")):
+      reward_track.append(
+        {
+          "milestone_day": _coerce_int(item.get("milestone_day"), default=1, minimum=1, maximum=365),
+          "reward": str(item.get("reward") or "").strip(),
+          "unlock_criteria": str(item.get("unlock_criteria") or "").strip(),
+        }
+      )
+    parsed["reward_track"] = reward_track
+
+  elif action == "progress_reassessment":
+    parsed["goal_progress_score"] = _coerce_int(parsed.get("goal_progress_score"), default=0, minimum=0, maximum=100)
+    parsed["plateau_diagnosis"] = _as_string_list(parsed.get("plateau_diagnosis"))
+    parsed["next_30_day_focus"] = _as_string_list(parsed.get("next_30_day_focus"))
+    parsed["accountability_checkpoints"] = _as_string_list(parsed.get("accountability_checkpoints"))
+    parsed["gamification"] = _normalize_gamification(parsed.get("gamification"))
+    parsed["share_card_text"] = str(parsed.get("share_card_text") or "").strip()
+    parsed["assumptions"] = _as_string_list(parsed.get("assumptions"))
+    metric_trends = []
+    for item in _as_object_list(parsed.get("metric_trends")):
+      metric_trends.append(
+        {
+          "metric": str(item.get("metric") or "").strip(),
+          "baseline": str(item.get("baseline") or "").strip(),
+          "current": str(item.get("current") or "").strip(),
+          "trend": str(item.get("trend") or "").strip(),
+        }
+      )
+    parsed["metric_trends"] = metric_trends
+    updated_targets = []
+    for item in _as_object_list(parsed.get("updated_targets")):
+      updated_targets.append(
+        {
+          "metric": str(item.get("metric") or "").strip(),
+          "target": str(item.get("target") or "").strip(),
+          "deadline": str(item.get("deadline") or "").strip(),
+        }
+      )
+    parsed["updated_targets"] = updated_targets
+
+  parsed["action"] = action
+  parsed.setdefault("status", "ok")
+  return json.dumps(parsed, ensure_ascii=False)
+
+
+def _build_fitness_profile_baseline(profile_json: str) -> str:
+  """Create a baseline fitness assessment for a user profile."""
+  payload = _parse_json_payload(profile_json)
+  return _generate_fitness_coach_response("profile_baseline", payload)
+
+
+def _generate_adaptive_workout_plan(
+  profile_json: str,
+  primary_goal: str = "",
+  timeline_weeks: int = 8,
+) -> str:
+  """Build an adaptive workout plan based on profile and constraints."""
+  payload = _parse_json_payload(profile_json)
+  if primary_goal:
+    payload["primary_goal"] = primary_goal
+  payload["timeline_weeks"] = timeline_weeks
+  return _generate_fitness_coach_response("generate_adaptive_plan", payload)
+
+
+def _log_fitness_workout_feedback(checkin_json: str) -> str:
+  """Adapt workouts using weekly workout feedback."""
+  payload = _parse_json_payload(checkin_json)
+  return _generate_fitness_coach_response("log_workout_feedback", payload)
+
+
+def _create_quick_workout_burst(
+  profile_json: str,
+  time_available_minutes: int = 20,
+  workout_location: str = "home",
+) -> str:
+  """Create a short workout burst for limited time windows."""
+  payload = _parse_json_payload(profile_json)
+  payload["time_available_minutes"] = time_available_minutes
+  payload["workout_location"] = workout_location
+  return _generate_fitness_coach_response("quick_workout_burst", payload)
+
+
+def _build_fitness_challenge_mode(
+  profile_json: str,
+  challenge_name: str = "",
+  challenge_duration_days: int = 7,
+) -> str:
+  """Build a gamified fitness challenge with streak and reward track."""
+  payload = _parse_json_payload(profile_json)
+  if challenge_name:
+    payload["challenge_name"] = challenge_name
+  payload["challenge_duration_days"] = challenge_duration_days
+  return _generate_fitness_coach_response("challenge_mode", payload)
+
+
+def _reassess_fitness_progress(profile_json: str) -> str:
+  """Reassess progress and define next 30-day priorities."""
+  payload = _parse_json_payload(profile_json)
+  return _generate_fitness_coach_response("progress_reassessment", payload)
+
+
 def get_tools_for_agent_slug(slug: str) -> List[Tool]:
   """Return LangChain tools enabled for a given prebuilt agent slug."""
   tools: List[Tool] = []
@@ -3380,6 +4063,68 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
         description=(
           "Assess readiness for a target role across core competencies and return structured JSON. "
           "Args: profile_json (str), target_role (str, optional)."
+        ),
+      )
+    )
+
+  elif slug == PREBUILT_AGENT_SLUGS["fitness_coach_agent"]:
+    tools.append(
+      Tool(
+        name="build_fitness_profile_baseline",
+        func=_build_fitness_profile_baseline,
+        description=(
+          "Build a structured baseline fitness assessment with readiness score, risk flags, and weekly targets. "
+          "Args: profile_json (str, JSON object with user fitness context)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="generate_adaptive_workout_plan",
+        func=_generate_adaptive_workout_plan,
+        description=(
+          "Generate an adaptive workout plan tailored to goal, available equipment, schedule, and constraints. "
+          "Args: profile_json (str), primary_goal (str, optional), timeline_weeks (int, default=8)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="create_quick_workout_burst",
+        func=_create_quick_workout_burst,
+        description=(
+          "Create a short adaptive workout (5-90 minutes) for limited-time sessions with substitutions and safety notes. "
+          "Args: profile_json (str), time_available_minutes (int, default=20), workout_location (str: home/gym/outdoors, default='home')."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="log_fitness_workout_feedback",
+        func=_log_fitness_workout_feedback,
+        description=(
+          "Analyze weekly adherence and fatigue feedback, then adapt the next workout cycle. "
+          "Args: checkin_json (str, JSON object with completed sessions and feedback)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="build_fitness_challenge_mode",
+        func=_build_fitness_challenge_mode,
+        description=(
+          "Generate a gamified challenge with daily missions, streak rules, and reward milestones. "
+          "Args: profile_json (str), challenge_name (str, optional), challenge_duration_days (int, default=7)."
+        ),
+      )
+    )
+    tools.append(
+      Tool(
+        name="reassess_fitness_progress",
+        func=_reassess_fitness_progress,
+        description=(
+          "Reassess goal progress and output next 30-day focus priorities and updated targets. "
+          "Args: profile_json (str, JSON object with baseline/plan/check-in context)."
         ),
       )
     )

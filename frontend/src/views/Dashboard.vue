@@ -3,7 +3,8 @@
     <header class="dashboard-header">
       <h1>My Agents</h1>
       <div class="header-actions">
-        <button @click="goToApiKeys" class="btn-secondary">🔑 API Keys</button>
+        <button @click="goToAvatarEmbeds" class="btn-secondary">Video Embeds</button>
+        <button @click="goToApiKeys" class="btn-secondary">API Keys</button>
         <button @click="handleLogout" class="btn-secondary">Logout</button>
         <button @click="goToNewAgent" class="btn-primary">+ New Agent</button>
       </div>
@@ -11,7 +12,7 @@
 
     <main class="dashboard-content">
       <div v-if="agentsStore.loading" class="loading">Loading agents...</div>
-      
+
       <div v-else-if="agentsStore.agents.length === 0" class="empty-state">
         <h2>No agents yet</h2>
         <p>Create your first AI agent to get started</p>
@@ -23,7 +24,7 @@
           v-for="agent in agentsStore.agents"
           :key="agent.id"
           class="agent-card"
-          @click="goToChat(agent.id)"
+          @click="openAgent(agent)"
         >
           <div class="agent-header">
             <h3>{{ agent.name }}</h3>
@@ -33,14 +34,14 @@
                 class="btn-icon"
                 title="Edit"
               >
-                ✏️
+                Edit
               </button>
               <button
                 @click.stop="deleteAgent(agent.id)"
                 class="btn-icon"
                 title="Delete"
               >
-                🗑️
+                Delete
               </button>
             </div>
           </div>
@@ -48,8 +49,10 @@
             {{ agent.description }}
           </p>
           <div v-if="agent.is_prebuilt" class="prebuilt-badge">
-            <span class="badge-icon">✨</span>
             <span>Pre-built</span>
+          </div>
+          <div v-if="agent.interaction_mode === 'avatar_realtime'" class="avatar-badge">
+            <span>Avatar Realtime</span>
           </div>
         </div>
       </div>
@@ -62,6 +65,7 @@ import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
+import type { Agent } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -79,6 +83,18 @@ function goToChat(agentId: string) {
   router.push(`/agents/${agentId}/chat`)
 }
 
+function goToAvatar(agentId: string) {
+  router.push(`/agents/${agentId}/avatar`)
+}
+
+function openAgent(agent: Agent) {
+  if (agent.interaction_mode === 'avatar_realtime') {
+    goToAvatar(agent.id)
+    return
+  }
+  goToChat(agent.id)
+}
+
 function editAgent(agentId: string) {
   router.push(`/agents/${agentId}/edit`)
 }
@@ -91,6 +107,10 @@ async function deleteAgent(agentId: string) {
 
 function goToApiKeys() {
   router.push('/api-keys')
+}
+
+function goToAvatarEmbeds() {
+  router.push('/avatar-embeds')
 }
 
 function handleLogout() {
@@ -114,7 +134,7 @@ function handleLogout() {
   left: 0;
   right: 0;
   bottom: 0;
-  background: 
+  background:
     radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
     radial-gradient(circle at 80% 80%, rgba(255, 119, 198, 0.3) 0%, transparent 50%);
   pointer-events: none;
@@ -242,27 +262,11 @@ h1 {
   overflow: hidden;
 }
 
-.agent-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1));
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
 .agent-card:hover {
   transform: translateY(-8px) scale(1.02);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
-}
-
-.agent-card:hover::before {
-  opacity: 1;
 }
 
 .agent-header {
@@ -288,11 +292,10 @@ h1 {
 
 .btn-icon {
   background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 18px;
+  font-size: 12px;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   transition: all 0.2s ease;
   color: white;
@@ -300,7 +303,6 @@ h1 {
 
 .btn-icon:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
 }
 
 .agent-description {
@@ -310,13 +312,12 @@ h1 {
   font-size: 15px;
 }
 
-.prebuilt-badge {
+.prebuilt-badge,
+.avatar-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
   border-radius: 20px;
   font-size: 13px;
   color: white;
@@ -324,8 +325,13 @@ h1 {
   margin-top: 8px;
 }
 
-.badge-icon {
-  font-size: 14px;
+.prebuilt-badge {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.avatar-badge {
+  margin-left: 8px;
+  background: rgba(56, 189, 248, 0.25);
+  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 </style>
-

@@ -21,13 +21,13 @@ def test_agent(db_session, test_user):
     return agent
 
 
-@patch('app.api.v1.chat.GeminiClient')
-def test_send_message_new_conversation(mock_gemini_client, client, auth_headers, test_agent):
+@patch("app.api.v1.chat.LangchainAgentService")
+def test_send_message_new_conversation(mock_langchain_service, client, auth_headers, test_agent):
     """Test sending a message creates a new conversation."""
-    # Mock Gemini response
+    # Mock LangChain response
     mock_instance = Mock()
     mock_instance.generate_response.return_value = "This is a test response."
-    mock_gemini_client.return_value = mock_instance
+    mock_langchain_service.return_value = mock_instance
     
     response = client.post(
         f"/api/v1/chat/{test_agent.id}",
@@ -43,12 +43,14 @@ def test_send_message_new_conversation(mock_gemini_client, client, auth_headers,
     assert data["message"] == "This is a test response."
     assert data["agent_id"] == str(test_agent.id)
     
-    # Verify Gemini was called
+    # Verify LangChain service was called
     mock_instance.generate_response.assert_called_once()
 
 
-@patch('app.api.v1.chat.GeminiClient')
-def test_send_message_existing_conversation(mock_gemini_client, client, auth_headers, db_session, test_user, test_agent):
+@patch("app.api.v1.chat.LangchainAgentService")
+def test_send_message_existing_conversation(
+    mock_langchain_service, client, auth_headers, db_session, test_user, test_agent
+):
     """Test sending a message to an existing conversation."""
     # Create conversation
     conv = Conversation(
@@ -59,10 +61,10 @@ def test_send_message_existing_conversation(mock_gemini_client, client, auth_hea
     db_session.add(conv)
     db_session.commit()
     
-    # Mock Gemini response
+    # Mock LangChain response
     mock_instance = Mock()
     mock_instance.generate_response.return_value = "Response to existing conversation."
-    mock_gemini_client.return_value = mock_instance
+    mock_langchain_service.return_value = mock_instance
     
     response = client.post(
         f"/api/v1/chat/{test_agent.id}",
@@ -79,8 +81,10 @@ def test_send_message_existing_conversation(mock_gemini_client, client, auth_hea
     assert data["message"] == "Response to existing conversation."
 
 
-@patch('app.api.v1.chat.GeminiClient')
-def test_send_message_with_history(mock_gemini_client, client, auth_headers, db_session, test_user, test_agent):
+@patch("app.api.v1.chat.LangchainAgentService")
+def test_send_message_with_history(
+    mock_langchain_service, client, auth_headers, db_session, test_user, test_agent
+):
     """Test that conversation history is included in Gemini call."""
     # Create conversation with messages
     conv = Conversation(
@@ -104,10 +108,10 @@ def test_send_message_with_history(mock_gemini_client, client, auth_headers, db_
     db_session.add_all([msg1, msg2])
     db_session.commit()
     
-    # Mock Gemini response
+    # Mock LangChain response
     mock_instance = Mock()
     mock_instance.generate_response.return_value = "Second response."
-    mock_gemini_client.return_value = mock_instance
+    mock_langchain_service.return_value = mock_instance
     
     response = client.post(
         f"/api/v1/chat/{test_agent.id}",
@@ -120,11 +124,11 @@ def test_send_message_with_history(mock_gemini_client, client, auth_headers, db_
     
     assert response.status_code == 200
     
-    # Verify Gemini was called with history
+    # Verify LangChain service was called with history
     call_args = mock_instance.generate_response.call_args
     assert call_args is not None
-    messages = call_args[1]["messages"]
-    assert len(messages) >= 2  # Should include previous messages
+    history = call_args.kwargs["history"]
+    assert len(history) >= 2  # Should include previous messages
 
 
 def test_send_message_agent_not_found(client, auth_headers):

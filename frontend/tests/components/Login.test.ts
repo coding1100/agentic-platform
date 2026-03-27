@@ -3,24 +3,31 @@ import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import Login from '@/views/Login.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: Login },
+    { path: '/signup', component: { template: '<div>Signup</div>' } },
     { path: '/dashboard', component: { template: '<div>Dashboard</div>' } }
   ]
 })
 
+let pinia: ReturnType<typeof createPinia>
+
 describe('Login Component', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
+  beforeEach(async () => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    await router.push('/login')
+    await router.isReady()
   })
 
   it('should render login form', () => {
     const wrapper = mount(Login, {
       global: {
-        plugins: [router]
+        plugins: [pinia, router]
       }
     })
 
@@ -32,9 +39,15 @@ describe('Login Component', () => {
   })
 
   it('should show error message on login failure', async () => {
+    const authStore = useAuthStore()
+    vi.spyOn(authStore, 'login').mockResolvedValue({
+      success: false,
+      error: 'Invalid credentials'
+    })
+
     const wrapper = mount(Login, {
       global: {
-        plugins: [router]
+        plugins: [pinia, router]
       }
     })
 
@@ -44,22 +57,10 @@ describe('Login Component', () => {
     await emailInput.setValue('test@example.com')
     await passwordInput.setValue('wrongpassword')
 
-    // Mock the store to return error
-    const authStore = wrapper.vm.$pinia._s.get('auth')
-    if (authStore) {
-      vi.spyOn(authStore, 'login').mockResolvedValue({
-        success: false,
-        error: 'Invalid credentials'
-      })
-    }
-
     await wrapper.find('form').trigger('submit.prevent')
-
-    // Wait for error to appear
     await wrapper.vm.$nextTick()
 
-    // Check if error message is displayed (if error handling is implemented)
-    expect(wrapper.vm).toBeDefined()
+    expect(wrapper.text()).toContain('Invalid credentials')
   })
 })
 

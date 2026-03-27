@@ -4,7 +4,8 @@ import { authApi } from '@/services/api'
 import type { User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('token'))
+  const initialToken = localStorage.getItem('token')
+  const token = ref<string | null>(initialToken ?? null)
   const currentUser = ref<User | null>(null)
 
   const isAuthenticated = computed(() => !!token.value)

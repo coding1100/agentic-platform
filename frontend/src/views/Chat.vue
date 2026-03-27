@@ -7,6 +7,7 @@
   <ResumeReview v-else-if="isResumeReviewAgent" />
   <CareerCoach v-else-if="isCareerCoachAgent" />
   <SkillGap v-else-if="isSkillGapAgent" />
+  <FitnessCoach v-else-if="isFitnessCoachAgent" />
   <div v-else class="chat-container">
     <header class="chat-header">
       <div class="header-left">
@@ -84,6 +85,7 @@ import ExamPrep from '@/views/ExamPrep.vue'
 import ResumeReview from '@/views/ResumeReview.vue'
 import CareerCoach from '@/views/CareerCoach.vue'
 import SkillGap from '@/views/SkillGap.vue'
+import FitnessCoach from '@/views/FitnessCoach.vue'
 import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
@@ -149,8 +151,18 @@ const isSkillGapAgent = computed(() => {
          a?.name?.toLowerCase().includes('skill gap')
 })
 
+const isFitnessCoachAgent = computed(() => {
+  const a = agent.value
+  return a?.slug === 'health.fitness_coach_agent' ||
+         a?.name?.toLowerCase().includes('fitness coach')
+})
+
 onMounted(async () => {
   await agentsStore.fetchAgent(agentId)
+  if (agent.value?.interaction_mode === 'avatar_realtime') {
+    router.replace(`/agents/${agentId}/avatar`)
+    return
+  }
   
   // Try to load existing conversation or create new one with greeting
   const conversationId = route.query.conversation_id as string

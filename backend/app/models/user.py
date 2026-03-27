@@ -20,3 +20,5 @@ class User(Base):
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
     states = relationship("UserState", back_populates="user", cascade="all, delete-orphan")
+    embed_deployments = relationship("AgentEmbedDeployment", back_populates="user", cascade="all, delete-orphan")
+    realtime_sessions = relationship("RealtimeSession", back_populates="user", cascade="all, delete-orphan")

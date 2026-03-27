@@ -14,8 +14,8 @@ vi.mock('@/services/api', () => ({
 describe('Auth Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.clearAllMocks()
-    localStorage.clear()
+    vi.resetAllMocks()
+    vi.mocked(localStorage.getItem).mockReturnValue(null)
   })
 
   it('should initialize with no token', () => {

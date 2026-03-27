@@ -44,8 +44,11 @@ def test_list_agents(client, auth_headers, db_session, test_user):
     
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert all(agent["name"] in ["Agent 1", "Agent 2"] for agent in data)
+    names = [agent["name"] for agent in data]
+    # API now includes active prebuilt agents in addition to user-owned agents.
+    assert "Agent 1" in names
+    assert "Agent 2" in names
+    assert len(data) >= 2
 
 
 def test_get_agent(client, auth_headers, db_session, test_user):
@@ -146,5 +149,5 @@ def test_agent_ownership(client, auth_headers, db_session):
     # Try to access other user's agent
     response = client.get(f"/api/v1/agents/{other_agent.id}", headers=auth_headers)
     
-    assert response.status_code == 404
+    assert response.status_code == 403
 

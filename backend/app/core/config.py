@@ -5,6 +5,7 @@ from typing import List
 class Settings(BaseSettings):
     # Environment
     ENV: str = "development"
+    TESTING: bool = False
     # Database
     # For Docker: use postgres:5432 (service name from docker-compose.yml)
     # For local dev: use localhost:5435 (if using docker-compose.yml with port mapping)
@@ -18,6 +19,13 @@ class Settings(BaseSettings):
     
     # Gemini API
     GEMINI_API_KEY: str = ""
+
+    # LiveKit (realtime A/V)
+    LIVEKIT_URL: str = ""
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
+    LIVEKIT_DEFAULT_TOKEN_TTL_SECONDS: int = 900
+    LIVEKIT_DEFAULT_ROOM_PREFIX: str = "avatar-interview"
     
     # CORS
     # For frontend web app - restrict to specific origins

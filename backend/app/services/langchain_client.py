@@ -552,6 +552,75 @@ class LangchainAgentService:
           '"message":"SKILL_GAP_REQUEST must include a valid action."}'
         )
 
+    # Structured, tool-driven flow for Fitness Coach Agent.
+    # The frontend sends workflow actions in JSON payloads using:
+    #   FITNESS_COACH_REQUEST
+    #   { "action": "...", "payload": { ... } }
+    if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS.get("fitness_coach_agent"):
+      import json
+      from app.tools.prebuilt_agents import _generate_fitness_coach_response
+
+      text = latest_input or ""
+      marker = "FITNESS_COACH_REQUEST"
+      marker_used = marker in text
+
+      if marker_used:
+        json_start = text.find("{", text.find(marker))
+        if json_start != -1:
+          payload_str = text[json_start:].strip()
+          try:
+            payload = json.loads(payload_str)
+          except Exception:
+            payload = {}
+        else:
+          payload = {}
+      else:
+        try:
+          payload = json.loads(text)
+        except Exception:
+          payload = {}
+
+      action = ""
+      action_payload = {}
+      if isinstance(payload, dict):
+        action = str(payload.get("action") or "").strip().lower()
+        if isinstance(payload.get("payload"), dict):
+          action_payload = dict(payload.get("payload") or {})
+          for key, value in payload.items():
+            if key in {"action", "payload"}:
+              continue
+            action_payload.setdefault(key, value)
+        else:
+          action_payload = dict(payload)
+          action_payload.pop("action", None)
+
+      if action in {
+        "profile_baseline",
+        "generate_adaptive_plan",
+        "quick_workout_burst",
+        "log_workout_feedback",
+        "challenge_mode",
+        "progress_reassessment",
+      }:
+        try:
+          return _generate_fitness_coach_response(action=action, payload=action_payload)
+        except Exception as e:
+          import traceback
+          print(f"Fitness coach tool failed: {traceback.format_exc()}")
+          return (
+            '{"action":"'
+            + action
+            + '","status":"error","error":"internal_error","message":"'
+            + str(e).replace('"', '\\"')
+            + '"}'
+          )
+
+      if marker_used:
+        return (
+          '{"action":"unknown","status":"error","error":"invalid_payload",'
+          '"message":"FITNESS_COACH_REQUEST must include a valid action."}'
+        )
+
     # Structured, tool-driven flow for Career Coach Agent.
     # The frontend sends workflow actions in JSON payloads using:
     #   CAREER_COACH_REQUEST
