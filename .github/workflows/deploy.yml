@@ -57,10 +57,12 @@ jobs:
             CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
             
             BUILD_BACKEND=false
+            BUILD_WORKER=false
             BUILD_FRONTEND=false
             
             if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(backend/|requirements\.txt|docker-compose)"; then
               BUILD_BACKEND=true
+              BUILD_WORKER=true
             fi
             
             if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(frontend/|package.*\.json|docker-compose)"; then
@@ -70,6 +72,7 @@ jobs:
             # If no changes detected or first deployment, build everything
             if [ -z "$CHANGED_FILES" ]; then
               BUILD_BACKEND=true
+              BUILD_WORKER=true
               BUILD_FRONTEND=true
             fi
             
@@ -86,7 +89,7 @@ jobs:
               # Build both in parallel if both changed
               docker-compose -f docker-compose.prod.yml build --parallel
             elif [ "$BUILD_BACKEND" = true ]; then
-              docker-compose -f docker-compose.prod.yml build backend
+              docker-compose -f docker-compose.prod.yml build backend livekit_worker
             elif [ "$BUILD_FRONTEND" = true ]; then
               docker-compose -f docker-compose.prod.yml build frontend
             else

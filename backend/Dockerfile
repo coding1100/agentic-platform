@@ -2,6 +2,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ARG REQUIREMENTS_FILE=requirements.txt
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -10,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies with cache mount
-COPY requirements.txt .
+COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \
     pip install --prefer-binary --no-cache-dir -r requirements.txt

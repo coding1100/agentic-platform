@@ -21,6 +21,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        REQUIREMENTS_FILE: requirements.txt
     container_name: agentic_platform_backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-agentic_user}:${POSTGRES_PASSWORD:-agentic_password}@postgres:5432/${POSTGRES_DB:-agentic_platform}
@@ -45,6 +47,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        REQUIREMENTS_FILE: requirements.worker.txt
     container_name: agentic_platform_livekit_worker
     command: ["python", "-m", "app.services.avatar_interview_worker", "start"]
     environment:
