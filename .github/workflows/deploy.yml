@@ -39,6 +39,8 @@ jobs:
             # Enable Docker BuildKit for faster builds with cache mounts
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
+            # Avoid occasional compose/buildx provenance metadata temp-file race
+            export BUILDX_NO_DEFAULT_ATTESTATIONS=1
             
             # Navigate to deployment directory
             cd ${DEPLOY_PATH:-/root/agentic-platform}
@@ -86,8 +88,8 @@ jobs:
             # Build only changed services (with cache for faster builds)
             echo "Building containers (using cache)..."
             if [ "$BUILD_BACKEND" = true ] && [ "$BUILD_FRONTEND" = true ]; then
-              # Build both in parallel if both changed
-              docker-compose -f docker-compose.prod.yml build --parallel
+              # Build sequentially to avoid compose metadata-file race conditions
+              docker-compose -f docker-compose.prod.yml build backend livekit_worker frontend
             elif [ "$BUILD_BACKEND" = true ]; then
               docker-compose -f docker-compose.prod.yml build backend livekit_worker
             elif [ "$BUILD_FRONTEND" = true ]; then
