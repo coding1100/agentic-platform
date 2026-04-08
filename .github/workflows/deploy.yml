@@ -29,7 +29,11 @@ jobs:
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          sshpass -p "${VPS_PASSWORD}" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST} << 'EOF'
+          sshpass -p "${VPS_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=120 \
+            ${VPS_USER}@${VPS_HOST} << 'EOF'
             set -e
             
             # Enable Docker BuildKit for faster builds with cache mounts
@@ -119,7 +123,11 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
-          sshpass -p "${VPS_PASSWORD}" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST} << 'EOF'
+          sshpass -p "${VPS_PASSWORD}" ssh \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=120 \
+            ${VPS_USER}@${VPS_HOST} << 'EOF'
             # Final health check with retries
             echo "Performing final health check..."
             for i in {1..10}; do
