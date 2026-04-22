@@ -23,5 +23,5 @@ COPY . .
 EXPOSE 8009
 
 # Run migrations and start server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8009"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8009 --workers ${WEB_CONCURRENCY:-2}"]
 

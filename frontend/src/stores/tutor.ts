@@ -1,247 +1,304 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref } from 'vue'
+import type {
+  TutorAction,
+  TutorAcademicLevel,
+  TutorExecuteResponse,
+  TutorLearningMode,
+  TutorProgressSummary,
+  TutorRecentResult,
+  TutorRecentSource,
+  TutorWorkspaceState,
+} from '@/types'
 
-export type TutorStep = 
-  | 'child-details'
-  | 'subject-selection'
-  | 'skill-assessment'
-  | 'focus-areas'
-  | 'topic-menu'
-  | 'learning'
+export type TutorStep = 'setup' | 'action-selection' | 'workspace'
 
-export type Subject = string // Now dynamic - any subject entered by user
-
-export interface ChildDetails {
-  name: string
+function createDefaultProgress(): TutorProgressSummary {
+  return {
+    sessions_completed: 0,
+    practice_sessions_attempted: 0,
+    practice_sessions_completed: 0,
+    source_sessions: 0,
+    average_score: null,
+    weak_topics: [],
+    mastery_by_topic: {},
+    recent_activity: [],
+    next_recommended_action: null,
+  }
 }
 
-export interface SkillAssessment {
-  proficiency: 'beginner' | 'intermediate' | 'advanced' | null
-  subject: Subject | null
+function createDefaultWorkspace(): TutorWorkspaceState {
+  return {
+    subject: '',
+    academic_level: null,
+    learner_name: null,
+    selected_action: null,
+    selected_mode: null,
+    progress: createDefaultProgress(),
+    recent_sources: [],
+    recent_results: [],
+  }
 }
 
-export interface FocusArea {
-  id: string
-  name: string
-  selected: boolean
+function normalizeProgress(value: Partial<TutorProgressSummary> | null | undefined): TutorProgressSummary {
+  const defaults = createDefaultProgress()
+  return {
+    ...defaults,
+    ...(value || {}),
+    weak_topics: Array.isArray(value?.weak_topics) ? value!.weak_topics.filter(Boolean) : defaults.weak_topics,
+    mastery_by_topic: typeof value?.mastery_by_topic === 'object' && value?.mastery_by_topic
+      ? Object.fromEntries(
+          Object.entries(value.mastery_by_topic).filter(([topic, score]) => {
+            return typeof topic === 'string' && typeof score === 'number' && Number.isFinite(score)
+          })
+        )
+      : defaults.mastery_by_topic,
+    recent_activity: Array.isArray(value?.recent_activity)
+      ? value!.recent_activity.filter(Boolean).slice(0, 8)
+      : defaults.recent_activity,
+  }
 }
 
-export interface Topic {
-  id: string
-  name: string
-  icon: string
+function normalizeWorkspaceState(value: Partial<TutorWorkspaceState> | null | undefined): TutorWorkspaceState {
+  const defaults = createDefaultWorkspace()
+  return {
+    ...defaults,
+    ...(value || {}),
+    subject: typeof value?.subject === 'string' ? value.subject : defaults.subject,
+    academic_level: value?.academic_level || defaults.academic_level,
+    learner_name: typeof value?.learner_name === 'string' && value.learner_name.trim()
+      ? value.learner_name.trim()
+      : null,
+    selected_action: value?.selected_action || null,
+    selected_mode: value?.selected_mode || null,
+    progress: normalizeProgress(value?.progress),
+    recent_sources: Array.isArray(value?.recent_sources) ? value.recent_sources.slice(0, 8) as TutorRecentSource[] : [],
+    recent_results: Array.isArray(value?.recent_results) ? value.recent_results.slice(0, 8) as TutorRecentResult[] : [],
+  }
 }
 
-export interface Level {
-  id: string
-  number: number
-  name: string
-  difficulty: 'easy' | 'medium' | 'hard'
-}
-
-export interface Game {
-  id: string
-  name: string
-  type: 'quiz' | 'practice' | 'challenge'
-  questions: any[]
-}
-
-export interface QuizResult {
-  correct: number
-  total: number
-  percentage: number
-  weakAreas: string[]
+function defaultModeForAction(action: TutorAction): TutorLearningMode {
+  switch (action) {
+    case 'upload_notes':
+      return 'notes_summary'
+    case 'practice':
+      return 'practice_quiz_generator'
+    default:
+      return 'personalized_learning'
+  }
 }
 
 export const useTutorStore = defineStore('tutor', () => {
-  const currentStep = ref<TutorStep>('child-details')
-  const childDetails = ref<ChildDetails>({ name: '' })
-  const selectedSubject = ref<Subject | null>(null)
-  const skillAssessment = ref<SkillAssessment>({ proficiency: null, subject: null })
-  // Focus areas are now optional - can be AI-generated or skipped
-  // For now, return empty array since subjects are dynamic
-  function getFocusAreasForSubject(subject: Subject | null): FocusArea[] {
-    // Focus areas can be AI-generated later if needed
-    // For now, we'll skip this step or make it optional
-    return []
-  }
-
-  const focusAreas = ref<FocusArea[]>([])
-
-  // Watch for subject changes and update focus areas
-  watch(selectedSubject, (newSubject) => {
-    if (newSubject) {
-      focusAreas.value = getFocusAreasForSubject(newSubject)
-    } else {
-      focusAreas.value = []
-    }
-  }, { immediate: true })
-  const selectedTopic = ref<Topic | null>(null)
-  const currentLevel = ref<Level | null>(null)
-  const currentGame = ref<Game | null>(null)
-  const currentQuiz = ref<any>(null)
-  const quizResults = ref<QuizResult | null>(null)
+  const currentStep = ref<TutorStep>('setup')
+  const subject = ref('')
+  const academicLevel = ref<TutorAcademicLevel | null>(null)
+  const learnerName = ref<string | null>(null)
+  const selectedAction = ref<TutorAction | null>(null)
+  const selectedMode = ref<TutorLearningMode | null>(null)
+  const progress = ref<TutorProgressSummary>(createDefaultProgress())
+  const recentSources = ref<TutorRecentSource[]>([])
+  const recentResults = ref<TutorRecentResult[]>([])
   const conversationId = ref<string | null>(null)
-  const levelProgress = ref<Record<string, number>>({}) // topicId -> current level number
-  const wrongAnswers = ref<Record<number, number>>({}) // question index -> count of wrong attempts
+  const lastResult = ref<TutorExecuteResponse | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  // Topics are now dynamically generated by AI - no hard-coding
-  const topics = ref<Topic[]>([])
-  
-  function setTopics(newTopics: Topic[]) {
-    topics.value = newTopics
-  }
-
-  function setStep(step: TutorStep) {
-    currentStep.value = step
-  }
-
-  function setChildDetails(details: ChildDetails) {
-    childDetails.value = details
-  }
-
-  function setSelectedSubject(subject: Subject) {
-    selectedSubject.value = subject
-  }
-
-  function setSkillAssessment(assessment: SkillAssessment) {
-    skillAssessment.value = assessment
-  }
-
-  function toggleFocusArea(areaId: string) {
-    const area = focusAreas.value.find(a => a.id === areaId)
-    if (area) {
-      area.selected = !area.selected
+  function syncStepFromWorkspace() {
+    if (!subject.value.trim() || !academicLevel.value) {
+      currentStep.value = 'setup'
+      return
     }
+    currentStep.value = selectedAction.value ? 'workspace' : 'action-selection'
   }
 
-  function setSelectedTopic(topic: Topic) {
-    selectedTopic.value = topic
+  function setWorkspaceState(state: Partial<TutorWorkspaceState>) {
+    const normalized = normalizeWorkspaceState(state)
+    subject.value = normalized.subject
+    academicLevel.value = normalized.academic_level || null
+    learnerName.value = normalized.learner_name || null
+    selectedAction.value = normalized.selected_action || null
+    selectedMode.value = normalized.selected_mode || null
+    progress.value = normalizeProgress(normalized.progress)
+    recentSources.value = normalized.recent_sources
+    recentResults.value = normalized.recent_results
+    syncStepFromWorkspace()
   }
 
-  function setCurrentLevel(level: Level | null) {
-    currentLevel.value = level
+  function exportWorkspaceState(): TutorWorkspaceState {
+    return normalizeWorkspaceState({
+      subject: subject.value,
+      academic_level: academicLevel.value,
+      learner_name: learnerName.value,
+      selected_action: selectedAction.value,
+      selected_mode: selectedMode.value,
+      progress: progress.value,
+      recent_sources: recentSources.value,
+      recent_results: recentResults.value,
+    })
   }
 
-  function setCurrentGame(game: Game | null) {
-    currentGame.value = game
+  function importWorkspaceState(state: Record<string, any>) {
+    setWorkspaceState(state as Partial<TutorWorkspaceState>)
   }
 
-  function incrementWrongAnswer(questionIndex: number) {
-    wrongAnswers.value[questionIndex] = (wrongAnswers.value[questionIndex] || 0) + 1
+  function setSetup(subjectValue: string, level: TutorAcademicLevel) {
+    subject.value = subjectValue.trim()
+    academicLevel.value = level
+    if (!selectedMode.value) {
+      selectedMode.value = 'personalized_learning'
+    }
+    currentStep.value = 'action-selection'
   }
 
-  function resetWrongAnswers() {
-    wrongAnswers.value = {}
+  function setLearnerName(name: string | null | undefined) {
+    const next = typeof name === 'string' ? name.trim() : ''
+    learnerName.value = next || null
   }
 
-  function getLevelProgress(topicId: string): number {
-    return levelProgress.value[topicId] || 1
+  function chooseAction(action: TutorAction) {
+    selectedAction.value = action
+    if (!selectedMode.value || selectedMode.value === 'notes_summary' || selectedMode.value === 'practice_quiz_generator' || selectedMode.value === 'personalized_learning') {
+      selectedMode.value = defaultModeForAction(action)
+    }
+    currentStep.value = 'workspace'
   }
 
-  function setLevelProgress(topicId: string, level: number) {
-    levelProgress.value[topicId] = level
-  }
-
-  function setCurrentQuiz(quiz: any) {
-    currentQuiz.value = quiz
-  }
-
-  function setQuizResults(results: QuizResult) {
-    quizResults.value = results
+  function setSelectedMode(mode: TutorLearningMode) {
+    selectedMode.value = mode
   }
 
   function setConversationId(id: string | null) {
     conversationId.value = id
   }
 
-  function reset() {
-    currentStep.value = 'child-details'
-    childDetails.value = { name: '' }
-    selectedSubject.value = null
-    skillAssessment.value = { proficiency: null, subject: null }
-    focusAreas.value.forEach(area => area.selected = false)
-    selectedTopic.value = null
-    currentLevel.value = null
-    currentGame.value = null
-    currentQuiz.value = null
-    quizResults.value = null
+  function setLoading(value: boolean) {
+    loading.value = value
+  }
+
+  function setError(message: string | null) {
+    error.value = message
+  }
+
+  function resetResult() {
+    lastResult.value = null
+  }
+
+  function applyExecuteResult(result: TutorExecuteResponse) {
+    lastResult.value = result
+    subject.value = result.subject
+    academicLevel.value = result.academic_level
+    learnerName.value = result.learner_name || learnerName.value
+    selectedAction.value = result.action
+    selectedMode.value = result.learning_mode
+    progress.value = normalizeProgress(result.progress_snapshot)
+
+    recentResults.value = [
+      {
+        action: result.action,
+        learning_mode: result.learning_mode,
+        title: result.practice_set.title,
+        score: recentResults.value[0]?.title === result.practice_set.title ? recentResults.value[0].score ?? null : null,
+        weak_topics: recentResults.value[0]?.title === result.practice_set.title ? recentResults.value[0].weak_topics ?? [] : [],
+        created_at: new Date().toISOString(),
+      },
+      ...recentResults.value.filter((item) => item.title !== result.practice_set.title),
+    ].slice(0, 8)
+
+    currentStep.value = 'workspace'
+    error.value = null
+  }
+
+  function addRecentSource(source: TutorRecentSource) {
+    recentSources.value = [source, ...recentSources.value.filter((item) => item.name !== source.name)].slice(0, 8)
+  }
+
+  function recordPracticeResult(payload: { title: string; score: number; weakTopics: string[]; masteredTopics?: string[] }) {
+    const previousAttempts = progress.value.practice_sessions_attempted
+    const previousAverage = progress.value.average_score ?? 0
+
+    progress.value.practice_sessions_attempted += 1
+    progress.value.practice_sessions_completed += 1
+    progress.value.average_score = Number(
+      (((previousAverage * previousAttempts) + payload.score) / progress.value.practice_sessions_attempted).toFixed(1)
+    )
+
+    const weakTopics = Array.from(new Set([...(progress.value.weak_topics || []), ...payload.weakTopics])).slice(0, 8)
+    progress.value.weak_topics = weakTopics
+    progress.value.recent_activity = [
+      `${new Date().toISOString().slice(0, 16).replace('T', ' ')} - Practice scored ${payload.score}%`,
+      ...progress.value.recent_activity,
+    ].slice(0, 8)
+
+    const mastery = { ...progress.value.mastery_by_topic }
+    for (const topic of payload.weakTopics) {
+      mastery[topic] = Math.max(0, (mastery[topic] ?? 60) - 10)
+    }
+    for (const topic of payload.masteredTopics || []) {
+      mastery[topic] = Math.min(100, (mastery[topic] ?? 70) + 8)
+    }
+    progress.value.mastery_by_topic = mastery
+
+    recentResults.value = recentResults.value.map((item, index) => {
+      if (index === 0 && item.title === payload.title) {
+        return {
+          ...item,
+          score: payload.score,
+          weak_topics: payload.weakTopics,
+        }
+      }
+      return item
+    })
+  }
+
+  function goToActionSelection() {
+    currentStep.value = 'action-selection'
+  }
+
+  function resetAll() {
+    currentStep.value = 'setup'
+    subject.value = ''
+    academicLevel.value = null
+    learnerName.value = null
+    selectedAction.value = null
+    selectedMode.value = null
+    progress.value = createDefaultProgress()
+    recentSources.value = []
+    recentResults.value = []
     conversationId.value = null
-    levelProgress.value = {}
-    wrongAnswers.value = {}
+    lastResult.value = null
+    loading.value = false
+    error.value = null
   }
 
-  function exportState() {
-    return JSON.parse(JSON.stringify({
-      currentStep: currentStep.value,
-      childDetails: childDetails.value,
-      selectedSubject: selectedSubject.value,
-      skillAssessment: skillAssessment.value,
-      focusAreas: focusAreas.value,
-      selectedTopic: selectedTopic.value,
-      currentLevel: currentLevel.value,
-      currentGame: currentGame.value,
-      currentQuiz: currentQuiz.value,
-      quizResults: quizResults.value,
-      conversationId: conversationId.value,
-      levelProgress: levelProgress.value,
-      wrongAnswers: wrongAnswers.value,
-      topics: topics.value,
-    }))
-  }
-
-  function importState(state: any) {
-    if (!state || typeof state !== 'object') return
-    if (state.currentStep) currentStep.value = state.currentStep
-    if (state.childDetails) childDetails.value = state.childDetails
-    if (state.selectedSubject !== undefined) selectedSubject.value = state.selectedSubject
-    if (state.skillAssessment) skillAssessment.value = state.skillAssessment
-    if (state.focusAreas) focusAreas.value = state.focusAreas
-    if (state.selectedTopic !== undefined) selectedTopic.value = state.selectedTopic
-    if (state.currentLevel !== undefined) currentLevel.value = state.currentLevel
-    if (state.currentGame !== undefined) currentGame.value = state.currentGame
-    if (state.currentQuiz !== undefined) currentQuiz.value = state.currentQuiz
-    if (state.quizResults !== undefined) quizResults.value = state.quizResults
-    if (state.conversationId !== undefined) conversationId.value = state.conversationId
-    if (state.levelProgress) levelProgress.value = state.levelProgress
-    if (state.wrongAnswers) wrongAnswers.value = state.wrongAnswers
-    if (state.topics) topics.value = state.topics
-  }
-
-    return {
+  return {
     currentStep,
-    childDetails,
-    selectedSubject,
-    skillAssessment,
-    focusAreas,
-    selectedTopic,
-    currentLevel,
-    currentGame,
-    currentQuiz,
-    quizResults,
+    subject,
+    academicLevel,
+    learnerName,
+    selectedAction,
+    selectedMode,
+    progress,
+    recentSources,
+    recentResults,
     conversationId,
-    levelProgress,
-    wrongAnswers,
-    topics,
-    getFocusAreasForSubject,
-    setStep,
-    setChildDetails,
-    setSelectedSubject,
-    setSkillAssessment,
-    toggleFocusArea,
-    setSelectedTopic,
-    setTopics,
-    setCurrentLevel,
-    setCurrentGame,
-    setCurrentQuiz,
-    setQuizResults,
+    lastResult,
+    loading,
+    error,
+    exportWorkspaceState,
+    importWorkspaceState,
+    setWorkspaceState,
+    setSetup,
+    setLearnerName,
+    chooseAction,
+    setSelectedMode,
     setConversationId,
-    incrementWrongAnswer,
-    resetWrongAnswers,
-    getLevelProgress,
-    setLevelProgress,
-    exportState,
-    importState,
-    reset
+    setLoading,
+    setError,
+    resetResult,
+    applyExecuteResult,
+    addRecentSource,
+    recordPracticeResult,
+    goToActionSelection,
+    resetAll,
   }
 })

@@ -50,6 +50,27 @@ Once the server is running, visit:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+## Tutor Tool API
+
+The Tutor Tool is an AI-based learning workflow, not a human tutoring service.
+
+Authenticated endpoints:
+
+- `GET /api/v1/tutor/{agent_id}/workspace`
+- `PUT /api/v1/tutor/{agent_id}/workspace`
+- `POST /api/v1/tutor/{agent_id}/execute`
+
+The structured Tutor flow stores workspace state in `user_states` and supports:
+
+- Subject + academic level setup
+- Hidden optional `learner_name` from the frontend
+- `ask_question`, `upload_notes`, and `practice`
+- Progress tracking, recent sources, and recent results
+
+Optional follow-up chat can continue over:
+
+- `POST /api/v1/chat/{agent_id}/stream`
+
 ## Realtime Avatar Setup (LiveKit)
 
 Add these environment variables to `.env`:

@@ -89,6 +89,110 @@ export interface ChatResponse {
   conversation_id: string
   message: string
   agent_id: string
+  user_message?: Message | null
+  assistant_message?: Message | null
+}
+
+export type TutorAcademicLevel = 'high_school' | 'college' | 'phd'
+export type TutorAction = 'ask_question' | 'upload_notes' | 'practice'
+export type TutorLearningMode =
+  | 'personalized_learning'
+  | 'assignment_assistant'
+  | 'practice_quiz_generator'
+  | 'concept_simplifier'
+  | 'notes_summary'
+  | 'exam_mode'
+  | 'source_based_learning'
+export type TutorSourceKind = 'notes' | 'pdf' | 'book'
+export type TutorPracticeFormat = 'multiple_choice' | 'short_answer' | 'mixed'
+
+export interface TutorRecentSource {
+  name: string
+  kind: TutorSourceKind
+  char_count: number
+  added_at: string
+}
+
+export interface TutorRecentResult {
+  action: TutorAction
+  learning_mode: TutorLearningMode
+  title: string
+  score?: number | null
+  weak_topics: string[]
+  created_at: string
+}
+
+export interface TutorProgressSummary {
+  sessions_completed: number
+  practice_sessions_attempted: number
+  practice_sessions_completed: number
+  source_sessions: number
+  average_score?: number | null
+  weak_topics: string[]
+  mastery_by_topic: Record<string, number>
+  recent_activity: string[]
+  next_recommended_action?: string | null
+}
+
+export interface TutorWorkspaceState {
+  subject: string
+  academic_level?: TutorAcademicLevel | null
+  learner_name?: string | null
+  selected_action?: TutorAction | null
+  selected_mode?: TutorLearningMode | null
+  progress: TutorProgressSummary
+  recent_sources: TutorRecentSource[]
+  recent_results: TutorRecentResult[]
+}
+
+export interface TutorPracticeOption {
+  id: string
+  text: string
+}
+
+export interface TutorPracticeQuestion {
+  id: string
+  prompt: string
+  type: 'multiple_choice' | 'short_answer'
+  concept?: string | null
+  options: TutorPracticeOption[]
+  answer?: string | null
+  explanation?: string | null
+}
+
+export interface TutorPracticeSet {
+  title: string
+  instructions: string
+  questions: TutorPracticeQuestion[]
+}
+
+export interface TutorExecuteRequest {
+  action: TutorAction
+  learning_mode: TutorLearningMode
+  subject: string
+  academic_level: TutorAcademicLevel
+  learner_name?: string | null
+  prompt?: string | null
+  source_text?: string | null
+  source_name?: string | null
+  source_kind?: TutorSourceKind | null
+  question_count?: number | null
+  practice_format?: TutorPracticeFormat | null
+}
+
+export interface TutorExecuteResponse {
+  action: TutorAction
+  learning_mode: TutorLearningMode
+  subject: string
+  academic_level: TutorAcademicLevel
+  learner_name?: string | null
+  summary?: string | null
+  explanation: string
+  steps: string[]
+  practice_set: TutorPracticeSet
+  key_concepts: string[]
+  progress_snapshot: TutorProgressSummary
+  suggested_next_actions: string[]
 }
 
 export interface RealtimeTokenRequest {

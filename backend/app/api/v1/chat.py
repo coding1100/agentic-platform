@@ -93,6 +93,7 @@ def chat(
     )
     db.add(user_message)
     db.commit()
+    db.refresh(user_message)
 
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -133,6 +134,7 @@ def chat(
     )
     db.add(assistant_message)
     db.commit()
+    db.refresh(assistant_message)
 
     # Update conversation updated_at
     from datetime import datetime
@@ -144,6 +146,8 @@ def chat(
         conversation_id=conversation.id,
         message=assistant_response,
         agent_id=agent_id,
+        user_message=user_message,
+        assistant_message=assistant_message,
     )
 
 

@@ -31,9 +31,9 @@
             <h2>Overview</h2>
             <p class="section-description">
               This API allows external platforms to interact with AI agents through REST endpoints. 
-              Our pre-built agents are <strong>not simple chatbots</strong> - they follow structured workflows 
-              and guide users through multi-step processes. Each agent maintains conversation context 
-              and provides personalized, tutor-like interactions. API keys can be <strong>universal</strong> 
+              Our pre-built agents are <strong>AI-based services and tools</strong>, not human-delivered teachers,
+              tutors, or coaches. They follow structured workflows, maintain context across sessions,
+              and support multi-step product experiences. API keys can be <strong>universal</strong> 
               (work with all agents) or <strong>agent-specific</strong> for enhanced security.
             </p>
             
@@ -98,38 +98,54 @@
 
           <!-- Personal Tutor Agent Section -->
           <section id="personal-tutor" class="docs-section-main">
-            <h2>Personal Tutor Agent Integration</h2>
+            <h2>Tutor Tool Integration</h2>
             <p class="section-description">
               <strong>Agent Slug:</strong> <code>education.personal_tutor</code><br>
-              A one-on-one tutor that explains concepts step-by-step, creates practice quizzes, 
-              and builds study plans. This agent follows a structured learning flow.
+              The Tutor Tool is an <strong>AI-powered learning workflow</strong>, not a human-delivered tutoring service.
+              The primary product flow is <code>Subject + Academic Level -> Choose Action -> Results Workspace</code>.
             </p>
 
             <h3>Typical Workflow</h3>
             <ol class="flow-list">
-              <li><strong>Initial Greeting:</strong> Agent introduces itself and asks what the user wants to learn</li>
-              <li><strong>Topic Selection:</strong> User specifies a topic (e.g., "I want to learn about photosynthesis")</li>
-              <li><strong>Concept Explanation:</strong> Agent explains concepts step-by-step with check-point questions</li>
-              <li><strong>Practice Quiz:</strong> Agent generates quizzes with multiple questions in a single response</li>
-              <li><strong>Study Plan:</strong> Agent can create personalized study plans</li>
+              <li><strong>Setup:</strong> Collect <code>subject</code> and <code>academic_level</code> with exact level values <code>high_school</code>, <code>college</code>, and <code>phd</code>.</li>
+              <li><strong>Choose Action:</strong> The learner selects <code>ask_question</code>, <code>upload_notes</code>, or <code>practice</code>.</li>
+              <li><strong>Structured AI Output:</strong> The Tutor Tool returns <code>explanation</code>, <code>steps</code>, and <code>practice_set</code>. <code>upload_notes</code> also returns <code>summary</code>.</li>
+              <li><strong>Progress Tracking:</strong> Workspace state persists subject, academic level, optional hidden <code>learner_name</code>, recent sources, results, and progress metrics.</li>
+              <li><strong>Optional Follow-Up Chat:</strong> Use the standard chat stream only for follow-up conversation after the main Tutor action completes.</li>
             </ol>
 
-            <h3>Endpoint</h3>
+            <h3>Endpoints</h3>
+            <div class="endpoint-info">
+              <code class="method-badge">GET</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/tutor/{agent_id}/workspace</code>
+            </div>
+            <div class="endpoint-info">
+              <code class="method-badge">PUT</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/tutor/{agent_id}/workspace</code>
+            </div>
             <div class="endpoint-info">
               <code class="method-badge">POST</code>
-              <code class="endpoint-url">{{ baseUrl }}/api/v1/public/agents/education.personal_tutor/chat</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/tutor/{agent_id}/execute</code>
             </div>
+            <div class="endpoint-info">
+              <code class="method-badge">POST</code>
+              <code class="endpoint-url">{{ baseUrl }}/api/v1/chat/{agent_id}/stream</code>
+            </div>
+            <p class="docs-note">
+              The structured Tutor endpoints are authenticated dashboard APIs and use <code>Authorization: Bearer ...</code>.
+              The public slug endpoint remains available for generic chat integrations, but the primary Tutor experience should use the structured Tutor APIs above.
+            </p>
 
             <h3>Request Format</h3>
             <h4>Headers</h4>
             <div class="code-block">
               <pre class="json-example">{{ JSON.stringify({
-  "X-API-Key": "your_api_key_here",
+  "Authorization": "Bearer your_jwt_token",
   "Content-Type": "application/json"
 }, null, 2) }}</pre>
               <button 
                 @click="copyToClipboard(JSON.stringify({
-  'X-API-Key': 'your_api_key_here',
+  Authorization: 'Bearer your_jwt_token',
   'Content-Type': 'application/json'
 }, null, 2), false)" 
                 class="btn-copy-inline"
@@ -138,16 +154,58 @@
               </button>
             </div>
 
-            <h4>Request Body</h4>
+            <h4>Workspace State Example</h4>
             <div class="code-block">
               <pre class="json-example">{{ JSON.stringify({
-  "conversation_id": "optional-uuid-or-null",
-  "message": "Your message here"
+  "subject": "Organic Chemistry",
+  "academic_level": "college",
+  "learner_name": "Hidden learner identity from frontend",
+  "selected_action": "practice",
+  "selected_mode": "practice_quiz_generator",
+  "progress": {
+    "sessions_completed": 4,
+    "practice_sessions_attempted": 3,
+    "practice_sessions_completed": 2,
+    "source_sessions": 1,
+    "average_score": 84,
+    "weak_topics": [
+      "Reaction mechanisms"
+    ],
+    "mastery_by_topic": {
+      "Stoichiometry": 91,
+      "Reaction mechanisms": 62
+    },
+    "recent_activity": [
+      "2026-04-22 14:20 - practice in Organic Chemistry"
+    ],
+    "next_recommended_action": "Upload notes for source-based review"
+  },
+  "recent_sources": [],
+  "recent_results": []
 }, null, 2) }}</pre>
               <button 
                 @click="copyToClipboard(JSON.stringify({
-  conversation_id: null,
-  message: 'Your message here'
+  subject: 'Organic Chemistry',
+  academic_level: 'college',
+  learner_name: 'Hidden learner identity from frontend',
+  selected_action: 'practice',
+  selected_mode: 'practice_quiz_generator',
+  progress: {
+    sessions_completed: 4,
+    practice_sessions_attempted: 3,
+    practice_sessions_completed: 2,
+    source_sessions: 1,
+    average_score: 84,
+    weak_topics: ['Reaction mechanisms'],
+    mastery_by_topic: {
+      Stoichiometry: 91,
+      'Reaction mechanisms': 62
+    },
+    recent_activity: ['2026-04-22 14:20 - practice in Organic Chemistry'],
+    next_recommended_action: 'Upload notes for source-based review'
+  },
+  recent_sources: [],
+  recent_results: []
 }, null, 2), false)" 
                 class="btn-copy-inline"
               >
@@ -155,33 +213,29 @@
               </button>
             </div>
             <p class="docs-note">
-              <code>conversation_id</code> is optional. If not provided or set to <code>null</code>, a new conversation will be created. 
-              Include the same <code>conversation_id</code> in subsequent requests to maintain conversation context.
+              <code>learner_name</code> is optional and can be supplied invisibly by the frontend for continuity and progress tracking.
+              It is never required to unlock the Tutor flow and should not appear as a visible onboarding field.
             </p>
 
             <h3>Response Format</h3>
             <div class="code-block">
-              <pre class="json-example">{{ JSON.stringify({
-  "conversation_id": "uuid-string",
-  "message": "Agent's response text",
-  "agent_id": "uuid-string"
-}, null, 2) }}</pre>
+              <pre class="json-example">{{ getQuizResponseExample() }}</pre>
+              <button @click="copyToClipboard(getQuizResponseExample(), false)" class="btn-copy-inline">ðŸ“‹</button>
             </div>
 
-            <h3>Example: Requesting a Quiz</h3>
+            <h3>Example: Run Structured Tutor Action</h3>
             <div class="code-block">
               <pre class="json-example">{{ getQuizExample() }}</pre>
               <button @click="copyToClipboard(getQuizExample(), false)" class="btn-copy-inline">📋</button>
             </div>
             <p class="docs-note">
-              <strong>Note:</strong> The agent generates ALL quiz questions in a single API call. 
-              The response will contain all questions formatted as:<br>
-              <code>**Question 1:** [question] ... **Answer:** [letter]</code>
+              <strong>Notes:</strong> Main Tutor actions run through <code>/execute</code> in a single API call.
+              Notes and PDFs should be converted to text client-side, and only source metadata should be persisted in workspace state.
             </p>
 
-            <h3>Quiz Response Parsing</h3>
+            <h3>Practice Set Handling</h3>
             <p class="section-description">
-              Quiz responses contain all questions in a structured format. Here's how to parse them:
+              Practice and quiz results can be graded locally in the frontend to avoid extra API round trips for every answer:
             </p>
             <div class="code-block">
               <pre class="js-example">{{ getQuizParserExample() }}</pre>
@@ -194,6 +248,9 @@
             </div>
 
             <h3>Complete Workflow Example</h3>
+            <p class="section-description">
+              This example loads the saved workspace, persists hidden learner context, executes a Tutor action, and then opens optional follow-up streaming chat.
+            </p>
             <div class="code-block">
               <pre class="js-example">{{ getCompleteWorkflowExample() }}</pre>
               <button 
@@ -930,7 +987,7 @@ const baseUrl = computed(() => {
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: '📋' },
-  { id: 'personal-tutor', label: 'Personal Tutor', icon: '👨‍🏫' },
+  { id: 'personal-tutor', label: 'Tutor Tool', icon: '👨‍🏫' },
   { id: 'course-creation', label: 'Course Creation', icon: '📚' },
   { id: 'language-practice', label: 'Language Practice', icon: '🌐' },
   { id: 'micro-learning', label: 'Micro-Learning', icon: '📖' },
@@ -1066,25 +1123,25 @@ axios.post(url, data, { headers })
 }
 
 function getQuizExample(): string {
-  return `// Request a quiz from Personal Tutor Agent
-POST ${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat
+  return `// Execute a structured Tutor action
+POST ${baseUrl.value}/api/v1/tutor/{agent_id}/execute
 Headers: {
-  "X-API-Key": "your_api_key_here",
+  "Authorization": "Bearer your_jwt_token",
   "Content-Type": "application/json"
 }
 Body: {
-  "conversation_id": "your_conversation_id_or_null",
-  "message": "Generate a quiz about photosynthesis with 5 multiple choice questions at medium difficulty level"
+  "action": "practice",
+  "learning_mode": "practice_quiz_generator",
+  "subject": "Photosynthesis",
+  "academic_level": "high_school",
+  "learner_name": "Hidden learner identity from frontend",
+  "prompt": "Create a focused review set for the light-dependent reactions.",
+  "question_count": 5,
+  "practice_format": "multiple_choice"
 }
 
-// Response contains ALL questions in one response:
-// **Question 1:** What is the primary pigment in photosynthesis?
-// A) Chlorophyll
-// B) Carotene
-// C) Xanthophyll
-// D) Anthocyanin
-// **Answer:** A
-// [All 5 questions follow...]`
+// The response includes explanation, steps, key_concepts,
+// suggested_next_actions, and a structured practice_set.`
 }
 
 function getCourseCreationExample(): string {
@@ -1338,124 +1395,177 @@ console.log("Quiz:", data2.message);`
 
 function getQuizResponseExample(): string {
   return `{
-  "conversation_id": "uuid-string",
-  "message": "**Question 1:** What is 2 + 2?\nA) 3\nB) 4\nC) 5\nD) 6\n**Answer:** B\n\n**Question 2:** What is the capital of France?\nA) London\nB) Berlin\nC) Paris\nD) Madrid\n**Answer:** C\n\n[More questions...]",
-  "agent_id": "uuid-string"
+  "action": "practice",
+  "learning_mode": "practice_quiz_generator",
+  "subject": "Photosynthesis",
+  "academic_level": "high_school",
+  "learner_name": "Hidden learner identity from frontend",
+  "summary": null,
+  "explanation": "Photosynthesis converts light energy into stored chemical energy. Focus first on where the light-dependent reactions happen and what outputs they produce.",
+  "steps": [
+    "Review chloroplast structure and identify the thylakoid membrane.",
+    "Track how light excites electrons in photosystem II and photosystem I.",
+    "Check how ATP and NADPH support the Calvin cycle."
+  ],
+  "practice_set": {
+    "title": "Photosynthesis review set",
+    "instructions": "Answer each question, then compare your choice with the key.",
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": "Where do the light-dependent reactions take place?",
+        "type": "multiple_choice",
+        "concept": "Light-dependent reactions",
+        "options": [
+          { "id": "A", "text": "Thylakoid membrane" },
+          { "id": "B", "text": "Mitochondrial matrix" },
+          { "id": "C", "text": "Ribosome" },
+          { "id": "D", "text": "Golgi apparatus" }
+        ],
+        "answer": "A",
+        "explanation": "Photosystems and the electron transport chain are embedded in the thylakoid membrane."
+      }
+    ]
+  },
+  "key_concepts": [
+    "Light-dependent reactions",
+    "ATP and NADPH",
+    "Chloroplast structure"
+  ],
+  "progress_snapshot": {
+    "sessions_completed": 5,
+    "practice_sessions_attempted": 4,
+    "practice_sessions_completed": 3,
+    "source_sessions": 1,
+    "average_score": 86,
+    "weak_topics": ["Calvin cycle"],
+    "mastery_by_topic": {
+      "Light-dependent reactions": 90,
+      "Calvin cycle": 63
+    },
+    "recent_activity": [
+      "2026-04-22 14:40 - practice in Photosynthesis"
+    ],
+    "next_recommended_action": "Upload notes for source-based review"
+  },
+  "suggested_next_actions": [
+    "Ask for a simpler explanation of the Calvin cycle",
+    "Generate a mixed practice set",
+    "Upload notes for source-based learning"
+  ]
 }`
 }
 
 function getQuizParserExample(): string {
-  return `// Parse quiz response
-function parseQuiz(quizText) {
-  const questions = [];
-  const questionRegex = /\\*\\*Question (\\d+):\\*\\*\\s*([^\\*]+?)(?=\\*\\*Question|\\*\\*Answer:|$)/gs;
-  const answerRegex = /\\*\\*Answer:\\*\\*\\s*([A-D])/g;
-  
-  let match;
-  while ((match = questionRegex.exec(quizText)) !== null) {
-    const questionNum = parseInt(match[1]);
-    const questionText = match[2].trim();
-    
-    // Extract options (A), B), C), D))
-    const options = [];
-    const optionRegex = /^([A-D])\\)\\s*(.+)$/gm;
-    let optionMatch;
-    while ((optionMatch = optionRegex.exec(questionText)) !== null) {
-      options.push({
-        letter: optionMatch[1],
-        text: optionMatch[2].trim()
-      });
-    }
-    
-    // Find answer
-    const answerMatch = quizText.substring(match.index).match(/\\*\\*Answer:\\*\\*\\s*([A-D])/);
-    const answer = answerMatch ? answerMatch[1] : null;
-    
-    questions.push({
-      number: questionNum,
-      question: questionText.split(/^[A-D]\\)/gm)[0].trim(),
-      options: options,
-      answer: answer
-    });
-  }
-  
-  return questions;
+  return `// Grade a Tutor practice_set locally
+function gradePracticeSet(practiceSet, answers) {
+  const results = practiceSet.questions.map((question) => {
+    const submitted = answers[question.id];
+    const expected = question.answer?.trim().toLowerCase();
+    const received = String(submitted || '').trim().toLowerCase();
+    const isCorrect = expected ? received === expected : false;
+
+    return {
+      id: question.id,
+      concept: question.concept || 'General',
+      correct: isCorrect
+    };
+  });
+
+  const total = results.length || 1;
+  const correct = results.filter((item) => item.correct).length;
+  const weakTopics = [...new Set(results.filter((item) => !item.correct).map((item) => item.concept))];
+  const masteredTopics = [...new Set(results.filter((item) => item.correct).map((item) => item.concept))];
+
+  return {
+    score: Math.round((correct / total) * 100),
+    weakTopics,
+    masteredTopics
+  };
 }
 
 // Usage
-const response = await fetch("${baseUrl.value}/api/v1/public/agents/education.personal_tutor/chat", {
-  method: "POST",
-  headers: {
-    "X-API-Key": "your_api_key_here",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    conversation_id: null,
-    message: "Generate a quiz about math with 5 questions"
-  })
+const result = gradePracticeSet(tutorResponse.practice_set, {
+  q1: "A",
+  q2: "chlorophyll absorbs light"
 });
 
-const data = await response.json();
-const questions = parseQuiz(data.message);
-console.log("Parsed questions:", questions);`
+console.log(result.score, result.weakTopics, result.masteredTopics);`
 }
 
 function getCompleteWorkflowExample(): string {
-  return `// Complete workflow: Learning session with Personal Tutor
-async function learningSession() {
-  const apiKey = "your_api_key_here";
+  return `// Complete workflow: structured Tutor session + optional chat stream
+async function tutorSession(agentId, token) {
   const baseUrl = "${baseUrl.value}";
-  let conversationId = null;
-  
-  // Step 1: Start conversation
-  let response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
+  const headers = {
+    "Authorization": \`Bearer \${token}\`,
+    "Content-Type": "application/json"
+  };
+
+  // Step 1: Load saved workspace
+  let response = await fetch(\`\${baseUrl}/api/v1/tutor/\${agentId}/workspace\`, {
+    headers
+  });
+  let workspace = await response.json();
+
+  // Step 2: Persist hidden learner identity from the frontend if available
+  workspace = {
+    ...workspace,
+    subject: workspace.subject || "Photosynthesis",
+    academic_level: workspace.academic_level || "high_school",
+    learner_name: "Hidden learner identity from frontend"
+  };
+
+  await fetch(\`\${baseUrl}/api/v1/tutor/\${agentId}/workspace\`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(workspace)
+  });
+
+  // Step 3: Run the main Tutor action
+  response = await fetch(\`\${baseUrl}/api/v1/tutor/\${agentId}/execute\`, {
     method: "POST",
-    headers: {
-      "X-API-Key": apiKey,
-      "Content-Type": "application/json"
-    },
+    headers,
+    body: JSON.stringify({
+      action: "upload_notes",
+      learning_mode: "source_based_learning",
+      subject: "Photosynthesis",
+      academic_level: "high_school",
+      learner_name: workspace.learner_name,
+      source_kind: "pdf",
+      source_name: "chapter-3.pdf",
+      source_text: "Paste or extract PDF text here",
+      prompt: "Summarize the source, explain the core process, and generate practice."
+    })
+  });
+
+  const tutorResult = await response.json();
+  console.log(tutorResult.summary);
+  console.log(tutorResult.explanation);
+  console.log(tutorResult.practice_set.questions);
+
+  // Step 4: Optional follow-up chat stream after the structured Tutor response
+  const streamResponse = await fetch(\`\${baseUrl}/api/v1/chat/\${agentId}/stream\`, {
+    method: "POST",
+    headers,
     body: JSON.stringify({
       conversation_id: null,
-      message: "I want to learn about photosynthesis"
+      message: "Give me one more analogy for photosystem II."
     })
   });
-  let data = await response.json();
-  conversationId = data.conversation_id;
-  console.log("Agent:", data.message);
-  
-  // Step 2: Ask for explanation
-  response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
-    method: "POST",
-    headers: {
-      "X-API-Key": apiKey,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      conversation_id: conversationId,  // Maintain context
-      message: "Can you explain how photosynthesis works step by step?"
-    })
-  });
-  data = await response.json();
-  console.log("Explanation:", data.message);
-  
-  // Step 3: Request a quiz
-  response = await fetch(\`\${baseUrl}/api/v1/public/agents/education.personal_tutor/chat\`, {
-    method: "POST",
-    headers: {
-      "X-API-Key": apiKey,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      conversation_id: conversationId,  // Same conversation
-      message: "Generate a quiz about photosynthesis with 5 multiple choice questions at medium difficulty"
-    })
-  });
-  data = await response.json();
-  console.log("Quiz:", data.message);
-  // Parse and display quiz questions...
-}
 
-learningSession();`
+  const reader = streamResponse.body.getReader();
+  const decoder = new TextDecoder();
+  let streamed = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    streamed += decoder.decode(value, { stream: true });
+  }
+
+  console.log(streamed);
+}`
 }
 
 function getListAgentsExample(): string {
@@ -1471,7 +1581,7 @@ Headers: {
     "id": "uuid",
     "name": "Personal Tutor",
     "slug": "education.personal_tutor",
-    "description": "One-on-one tutor that explains concepts...",
+    "description": "AI-powered Tutor Tool for structured explanations, notes, and practice...",
     "category": "education"
   },
   {
@@ -1513,7 +1623,7 @@ Headers: {
 ]`
 }
 
-async function copyToClipboard(text: string) {
+async function copyToClipboard(text: string, _inline: boolean = false) {
   try {
     await navigator.clipboard.writeText(text)
     copied.value = true

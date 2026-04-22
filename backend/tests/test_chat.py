@@ -42,6 +42,10 @@ def test_send_message_new_conversation(mock_langchain_service, client, auth_head
     assert "conversation_id" in data
     assert data["message"] == "This is a test response."
     assert data["agent_id"] == str(test_agent.id)
+    assert data["user_message"]["role"] == "user"
+    assert data["user_message"]["content"] == "Hello, how are you?"
+    assert data["assistant_message"]["role"] == "assistant"
+    assert data["assistant_message"]["content"] == "This is a test response."
     
     # Verify LangChain service was called
     mock_instance.generate_response.assert_called_once()

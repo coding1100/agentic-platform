@@ -1,6 +1,7 @@
 # Agentic Platform MVP
 
 A multi-tenant AI agent platform where customers can create, configure, and chat with AI agents.
+All platform experiences are AI-based services and tools, not human-delivered teachers, tutors, or coaches.
 
 ## Tech Stack
 
@@ -110,12 +111,34 @@ Frontend will be available at http://localhost:5173
 
 ## Features
 
+- Structured Tutor Tool workflow with subject, academic level, notes/PDF study, practice, and progress tracking
+
 - ✅ User authentication (signup/login)
 - ✅ Agent management (CRUD operations)
 - ✅ Conversation management
 - ✅ Chat interface with Gemini integration
 - ✅ Multi-tenant architecture with proper ownership checks
 - ✅ Unit tests for backend and frontend
+
+## Tutor Tool
+
+The Tutor Tool now uses a structured AI workflow:
+
+- `Subject + Academic Level -> Choose Action -> Results Workspace`
+- Main actions: `ask_question`, `upload_notes`, `practice`
+- Core outputs: `explanation`, `steps`, `practice_set`
+- `upload_notes` also returns `summary`
+- Workspace state persists optional hidden `learner_name`, progress, recent sources, and recent results
+
+Authenticated Tutor endpoints:
+
+- `GET /api/v1/tutor/{agent_id}/workspace`
+- `PUT /api/v1/tutor/{agent_id}/workspace`
+- `POST /api/v1/tutor/{agent_id}/execute`
+
+Optional follow-up chat continues through:
+
+- `POST /api/v1/chat/{agent_id}/stream`
 
 ## Testing
 

@@ -69,15 +69,33 @@ export const useChatStore = defineStore('chat', () => {
   async function sendMessage(agentId: string, message: string, conversationId?: string) {
     sending.value = true
     try {
+      const targetConversationId = conversationId || activeConversationId.value || null
       const response = await chatApi.sendMessage(agentId, {
-        conversation_id: conversationId || null,
+        conversation_id: targetConversationId,
         message
       })
 
-      // Refetch the conversation to get all messages including greeting if it's a new conversation
-      await fetchConversation(response.conversation_id, true)
-
+      const isSameConversation = activeConversationId.value === response.conversation_id
+      if (!isSameConversation) {
+        messages.value = []
+      }
       activeConversationId.value = response.conversation_id
+      if (response.user_message && response.assistant_message) {
+        const nextMessages = isSameConversation ? [...messages.value] : []
+        const seenIds = new Set(nextMessages.map((item) => item.id))
+
+        for (const item of [response.user_message, response.assistant_message]) {
+          if (!item || seenIds.has(item.id)) continue
+          nextMessages.push(item)
+          seenIds.add(item.id)
+        }
+
+        messages.value = nextMessages
+        lastFetchTime.value[response.conversation_id] = Date.now()
+        lastMessageCount.value[response.conversation_id] = nextMessages.length
+      } else {
+        await fetchConversation(response.conversation_id, true)
+      }
 
       return { success: true, response }
     } catch (error: any) {

@@ -167,6 +167,7 @@ def public_chat(
     )
     db.add(user_message)
     db.commit()
+    db.refresh(user_message)
     
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -197,6 +198,7 @@ def public_chat(
     )
     db.add(assistant_message)
     db.commit()
+    db.refresh(assistant_message)
     
     # Update conversation updated_at
     conversation.updated_at = datetime.utcnow()
@@ -206,6 +208,8 @@ def public_chat(
         conversation_id=conversation.id,
         message=assistant_response,
         agent_id=agent.id,
+        user_message=user_message,
+        assistant_message=assistant_message,
     )
 
 

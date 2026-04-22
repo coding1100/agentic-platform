@@ -5,6 +5,9 @@ import type {
   Conversation,
   ChatRequest,
   ChatResponse,
+  TutorExecuteRequest,
+  TutorExecuteResponse,
+  TutorWorkspaceState,
   ApiKey,
   ApiKeyCreate,
   ApiKeyUpdate,
@@ -161,6 +164,23 @@ export const chatApi = {
     }
 
     return response.body as ReadableStream
+  }
+}
+
+export const tutorApi = {
+  async getWorkspace(agentId: string): Promise<TutorWorkspaceState> {
+    const response = await apiClient.get(`/api/v1/tutor/${agentId}/workspace`)
+    return response.data
+  },
+
+  async saveWorkspace(agentId: string, data: TutorWorkspaceState): Promise<TutorWorkspaceState> {
+    const response = await apiClient.put(`/api/v1/tutor/${agentId}/workspace`, data)
+    return response.data
+  },
+
+  async execute(agentId: string, data: TutorExecuteRequest): Promise<TutorExecuteResponse> {
+    const response = await apiClient.post(`/api/v1/tutor/${agentId}/execute`, data)
+    return response.data
   }
 }
 
