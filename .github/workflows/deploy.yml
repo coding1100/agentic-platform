@@ -32,9 +32,42 @@ jobs:
 
       - name: Setup SSH
         run: |
+          set -euo pipefail
+
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "VPS_HOST secret is empty. Please set it in repository secrets."
+            exit 1
+          fi
+
+          HOST_RAW="${{ secrets.VPS_HOST }}"
+          HOST_NO_PROTO="${HOST_RAW#ssh://}"
+          HOST_NO_USER="${HOST_NO_PROTO#*@}"
+          SSH_HOST="${HOST_NO_USER}"
+          SSH_PORT="22"
+          if echo "${HOST_NO_USER}" | grep -qE '^[^:/]+:[0-9]+$'; then
+            SSH_HOST="${HOST_NO_USER%%:*}"
+            SSH_PORT="${HOST_NO_USER##*:}"
+          fi
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          touch ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          # Best-effort key scan to avoid transient DNS/network failures breaking deployment.
+          SSH_SCAN_OK=false
+          for i in 1 2 3; do
+            if ssh-keyscan -T 10 -p "${SSH_PORT}" -H "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null; then
+              SSH_SCAN_OK=true
+              break
+            fi
+            echo "ssh-keyscan attempt ${i}/3 failed; retrying..."
+            sleep 2
+          done
+
+          if [ "$SSH_SCAN_OK" != "true" ]; then
+            echo "Warning: could not pre-populate known_hosts; continuing (StrictHostKeyChecking=no is enabled in deploy step)."
+          fi
 
       - name: Deploy & Health Check
         env:
@@ -43,12 +76,29 @@ jobs:
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
+          set -euo pipefail
+
+          if [ -z "${VPS_HOST}" ] || [ -z "${VPS_USER}" ] || [ -z "${VPS_PASSWORD}" ]; then
+            echo "VPS_HOST, VPS_USER, and VPS_PASSWORD secrets are required."
+            exit 1
+          fi
+
+          HOST_NO_PROTO="${VPS_HOST#ssh://}"
+          HOST_NO_USER="${HOST_NO_PROTO#*@}"
+          SSH_HOST="${HOST_NO_USER}"
+          SSH_PORT="22"
+          if echo "${HOST_NO_USER}" | grep -qE '^[^:/]+:[0-9]+$'; then
+            SSH_HOST="${HOST_NO_USER%%:*}"
+            SSH_PORT="${HOST_NO_USER##*:}"
+          fi
+
           sshpass -p "${VPS_PASSWORD}" ssh \
             -o StrictHostKeyChecking=no \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             -o ConnectTimeout=10 \
-            ${VPS_USER}@${VPS_HOST} \
+            -p "${SSH_PORT}" \
+            ${VPS_USER}@${SSH_HOST} \
             DEPLOY_PATH="${DEPLOY_PATH:-/root/agentic-platform}" \
             bash -s << 'EOF'
 
