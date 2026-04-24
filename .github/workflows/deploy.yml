@@ -3,26 +3,40 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - main  # Change to your main branch name (main/master)
-  workflow_dispatch:  # Allows manual triggering
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 30
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Required for git diff HEAD~1 during smart rebuild detection
+
+      - name: Cache sshpass
+        id: cache-sshpass
+        uses: actions/cache@v4
+        with:
+          path: /usr/bin/sshpass
+          key: sshpass-${{ runner.os }}
+
+      - name: Install sshpass (if not cached)
+        if: steps.cache-sshpass.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
 
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          # Install sshpass for password authentication
-          sudo apt-get update
-          sudo apt-get install -y sshpass
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy to VPS
+      - name: Deploy & Health Check
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -33,121 +47,106 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
-            ${VPS_USER}@${VPS_HOST} << 'EOF'
-            set -e
-            
-            # Enable Docker BuildKit for faster builds with cache mounts
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
-            # Avoid occasional compose/buildx provenance metadata temp-file race
-            export BUILDX_NO_DEFAULT_ATTESTATIONS=1
-            
-            # Navigate to deployment directory
-            cd ${DEPLOY_PATH:-/root/agentic-platform}
-            
-            # Ensure we're on the main branch and get latest code
-            git fetch origin --prune
-            git checkout main || git checkout -b main
-            git pull origin main || git reset --hard origin/main
-            
-            # Set port environment variables to avoid conflicts
-            export FRONTEND_PORT=8080
-            export BACKEND_PORT=8010
-            export WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
-            
-            # Detect which services changed (smart rebuilds)
-            echo "Detecting changed files..."
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
-            
-            BUILD_BACKEND=false
-            BUILD_WORKER=false
-            BUILD_FRONTEND=false
-            
-            if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(backend/|requirements\.txt|docker-compose)"; then
-              BUILD_BACKEND=true
-              BUILD_WORKER=true
-            fi
-            
-            if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(frontend/|package.*\.json|docker-compose)"; then
-              BUILD_FRONTEND=true
-            fi
-            
-            # If no changes detected or first deployment, build everything
-            if [ -z "$CHANGED_FILES" ]; then
-              BUILD_BACKEND=true
-              BUILD_WORKER=true
-              BUILD_FRONTEND=true
-            fi
-            
-            echo "Stopping existing containers..."
-            docker-compose -f docker-compose.prod.yml down || true
-            
-            # Remove any containers that might be using the ports
-            docker stop agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
-            docker rm agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
-            
-            # Build only changed services (with cache for faster builds)
-            echo "Building containers (using cache)..."
-            if [ "$BUILD_BACKEND" = true ] && [ "$BUILD_FRONTEND" = true ]; then
-              # Build sequentially to avoid compose metadata-file race conditions
-              docker-compose -f docker-compose.prod.yml build backend livekit_worker frontend
-            elif [ "$BUILD_BACKEND" = true ]; then
-              docker-compose -f docker-compose.prod.yml build backend livekit_worker
-            elif [ "$BUILD_FRONTEND" = true ]; then
-              docker-compose -f docker-compose.prod.yml build frontend
-            else
-              echo "No changes detected, skipping build"
-            fi
-            
-            echo "Starting containers with ports: Frontend=8080, Backend=8010..."
-            docker-compose -f docker-compose.prod.yml up -d
-            
-            echo "Waiting for services to be healthy..."
-            # Wait for backend to be ready with retries
-            for i in {1..30}; do
-              if curl -f http://localhost:8010/health >/dev/null 2>&1; then
-                echo "Backend is healthy!"
-                break
-              fi
-              if [ $i -eq 30 ]; then
-                echo "Backend health check failed after 30 attempts"
-                docker-compose -f docker-compose.prod.yml ps
-                exit 1
-              fi
-              sleep 2
-            done
-            
-            echo "Checking container status..."
-            docker-compose -f docker-compose.prod.yml ps
-            
-            echo "Deployment completed successfully!"
-          EOF
+            -o ConnectTimeout=10 \
+            ${VPS_USER}@${VPS_HOST} \
+            DEPLOY_PATH="${DEPLOY_PATH:-/root/agentic-platform}" \
+            bash -s << 'EOF'
 
-      - name: Health Check
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
-        run: |
-          sshpass -p "${VPS_PASSWORD}" ssh \
-            -o StrictHostKeyChecking=no \
-            -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=120 \
-            ${VPS_USER}@${VPS_HOST} << 'EOF'
-            # Final health check with retries
-            echo "Performing final health check..."
-            for i in {1..10}; do
-              if curl -f http://localhost:8010/health >/dev/null 2>&1; then
-                echo "Health check passed!"
-                exit 0
-              fi
-              echo "Attempt $i/10 failed, retrying..."
-              sleep 2
-            done
-            
-            echo "Health check failed after 10 attempts"
-            docker-compose -f docker-compose.prod.yml ps
-            docker-compose -f docker-compose.prod.yml logs --tail=50 backend
-            exit 1
-          EOF
+          set -e
 
+          # Enable Docker BuildKit for faster builds with cache mounts
+          export DOCKER_BUILDKIT=1
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export COMPOSE_PARALLEL_LIMIT=1
+          # Avoid occasional compose/buildx provenance metadata temp-file race
+          export BUILDX_NO_DEFAULT_ATTESTATIONS=1
+
+          cd "$DEPLOY_PATH"
+
+          # Ensure we're on main and get latest code
+          git fetch origin --prune
+          git checkout main 2>/dev/null || git checkout -b main
+          git pull origin main || git reset --hard origin/main
+
+          # Set port environment variables to avoid conflicts
+          export FRONTEND_PORT=8080
+          export BACKEND_PORT=8010
+          export WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+
+          # Detect which services changed (smart rebuilds)
+          echo "Detecting changed files..."
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+
+          BUILD_BACKEND=false
+          BUILD_WORKER=false
+          BUILD_FRONTEND=false
+
+          if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(backend/|requirements\.txt|docker-compose)"; then
+            BUILD_BACKEND=true
+            BUILD_WORKER=true
+          fi
+
+          if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(frontend/|package.*\.json|docker-compose)"; then
+            BUILD_FRONTEND=true
+          fi
+
+          echo "Stopping existing containers..."
+          docker compose -f docker-compose.prod.yml down || true
+
+          # Remove any containers that might be holding the ports
+          docker stop agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
+          docker rm   agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
+
+          # Build only changed services (with layer cache)
+          echo "Building containers (using cache)..."
+          if [ "$BUILD_BACKEND" = true ] && [ "$BUILD_FRONTEND" = true ]; then
+            # Build each service in a dedicated command to avoid compose metadata-file races
+            docker compose -f docker-compose.prod.yml build backend
+            docker compose -f docker-compose.prod.yml build livekit_worker
+            docker compose -f docker-compose.prod.yml build frontend
+          elif [ "$BUILD_BACKEND" = true ]; then
+            docker compose -f docker-compose.prod.yml build backend
+            docker compose -f docker-compose.prod.yml build livekit_worker
+          elif [ "$BUILD_FRONTEND" = true ]; then
+            docker compose -f docker-compose.prod.yml build frontend
+          else
+            echo "No changes detected, skipping build"
+          fi
+
+          echo "Starting containers - Frontend=${FRONTEND_PORT}, Backend=${BACKEND_PORT}..."
+          docker compose -f docker-compose.prod.yml up -d
+
+          # Wait for backend to be ready
+          echo "Waiting for backend to be healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8010/health > /dev/null; then
+              echo "Backend is healthy!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Backend health check failed after 30 attempts"
+              docker compose -f docker-compose.prod.yml ps
+              docker compose -f docker-compose.prod.yml logs --tail=50 backend
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "--- Container status ---"
+          docker compose -f docker-compose.prod.yml ps
+
+          # Final health check
+          echo "Performing final health check..."
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:8010/health > /dev/null; then
+              echo "Health check passed! Deployment complete."
+              exit 0
+            fi
+            echo "Attempt $i/10 failed, retrying..."
+            sleep 2
+          done
+
+          echo "Final health check failed"
+          docker compose -f docker-compose.prod.yml logs --tail=50 backend
+          exit 1
+          EOF

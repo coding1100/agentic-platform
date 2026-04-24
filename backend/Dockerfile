@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \
-    pip install --prefer-binary --no-cache-dir -r requirements.txt
+    pip install --prefer-binary -r requirements.txt
 
 # Copy application code
 COPY . .
