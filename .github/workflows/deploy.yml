@@ -56,10 +56,6 @@ jobs:
 
           # Enable Docker BuildKit for faster builds with cache mounts
           export DOCKER_BUILDKIT=1
-          export COMPOSE_DOCKER_CLI_BUILD=1
-          export COMPOSE_PARALLEL_LIMIT=1
-          # Avoid occasional compose/buildx provenance metadata temp-file race
-          export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
           cd "$DEPLOY_PATH"
 
@@ -99,22 +95,31 @@ jobs:
 
           # Build only changed services (with layer cache)
           echo "Building containers (using cache)..."
-          if [ "$BUILD_BACKEND" = true ] && [ "$BUILD_FRONTEND" = true ]; then
-            # Build each service in a dedicated command to avoid compose metadata-file races
-            docker compose -f docker-compose.prod.yml build backend
-            docker compose -f docker-compose.prod.yml build livekit_worker
-            docker compose -f docker-compose.prod.yml build frontend
-          elif [ "$BUILD_BACKEND" = true ]; then
-            docker compose -f docker-compose.prod.yml build backend
-            docker compose -f docker-compose.prod.yml build livekit_worker
-          elif [ "$BUILD_FRONTEND" = true ]; then
-            docker compose -f docker-compose.prod.yml build frontend
-          else
+          if [ "$BUILD_BACKEND" = true ]; then
+            docker build \
+              --build-arg REQUIREMENTS_FILE=requirements.txt \
+              -t agentic-platform-backend \
+              -f backend/Dockerfile backend
+
+            docker build \
+              --build-arg REQUIREMENTS_FILE=requirements.worker.txt \
+              -t agentic-platform-livekit_worker \
+              -f backend/Dockerfile backend
+          fi
+
+          if [ "$BUILD_FRONTEND" = true ]; then
+            docker build \
+              --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://agentic-platform.namatechnologlies.com}" \
+              -t agentic-platform-frontend \
+              -f frontend/Dockerfile frontend
+          fi
+
+          if [ "$BUILD_BACKEND" = false ] && [ "$BUILD_FRONTEND" = false ]; then
             echo "No changes detected, skipping build"
           fi
 
           echo "Starting containers - Frontend=${FRONTEND_PORT}, Backend=${BACKEND_PORT}..."
-          docker compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml up -d --no-build
 
           # Wait for backend to be ready
           echo "Waiting for backend to be healthy..."

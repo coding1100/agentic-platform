@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements and install Python dependencies with cache mount
 COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip setuptools wheel && \
-    pip install --prefer-binary -r requirements.txt
+    python -m pip install --prefer-binary -r requirements.txt
 
 # Copy application code
 COPY . .

@@ -18,6 +18,7 @@ services:
       - agentic_platform_network
 
   backend:
+    image: agentic-platform-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -45,6 +46,7 @@ services:
       - agentic_platform_network
 
   livekit_worker:
+    image: agentic-platform-livekit_worker
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -68,6 +70,7 @@ services:
       - agentic_platform_network
 
   frontend:
+    image: agentic-platform-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
