@@ -124,12 +124,10 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
 
           BUILD_BACKEND=false
-          BUILD_WORKER=false
           BUILD_FRONTEND=false
 
           if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(backend/|requirements\.txt|docker-compose)"; then
             BUILD_BACKEND=true
-            BUILD_WORKER=true
           fi
 
           if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -qE "(frontend/|package.*\.json|docker-compose)"; then
@@ -149,11 +147,6 @@ jobs:
             docker build \
               --build-arg REQUIREMENTS_FILE=requirements.txt \
               -t agentic-platform-backend \
-              -f backend/Dockerfile backend
-
-            docker build \
-              --build-arg REQUIREMENTS_FILE=requirements.worker.txt \
-              -t agentic-platform-livekit_worker \
               -f backend/Dockerfile backend
           fi
 

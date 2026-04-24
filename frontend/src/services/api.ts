@@ -12,11 +12,6 @@ import type {
   ApiKeyCreate,
   ApiKeyUpdate,
   ApiKeyUsageStats,
-  EmbedDeployment,
-  EmbedDeploymentUpsert,
-  RealtimeSession,
-  RealtimeTokenRequest,
-  RealtimeTokenResponse,
 } from '@/types'
 
 const defaultBaseUrl =
@@ -105,11 +100,6 @@ export const agentsApi = {
     greeting_message?: string
     model?: string
     temperature?: number
-    interaction_mode?: 'chat' | 'avatar_realtime'
-    livekit_agent_name?: string | null
-    avatar_provider?: string | null
-    avatar_id?: string | null
-    realtime_config?: Record<string, any> | null
   }): Promise<Agent> {
     const response = await apiClient.post('/api/v1/agents', data)
     return response.data
@@ -262,35 +252,6 @@ export const stateApi = {
 
   async save(namespace: string, data: Record<string, any>): Promise<UserStateResponse> {
     const response = await apiClient.put(`/api/v1/state/${encodeURIComponent(namespace)}`, { data })
-    return response.data
-  }
-}
-
-export const realtimeApi = {
-  async upsertEmbedDeployment(agentId: string, data: EmbedDeploymentUpsert): Promise<EmbedDeployment> {
-    const response = await apiClient.put(`/api/v1/realtime/agents/${agentId}/embed`, data)
-    return response.data
-  },
-
-  async getEmbedDeployment(agentId: string): Promise<EmbedDeployment> {
-    const response = await apiClient.get(`/api/v1/realtime/agents/${agentId}/embed`)
-    return response.data
-  },
-
-  async createAgentToken(agentId: string, data: RealtimeTokenRequest): Promise<RealtimeTokenResponse> {
-    const response = await apiClient.post(`/api/v1/realtime/agents/${agentId}/token`, data)
-    return response.data
-  },
-
-  async listSessions(agentId: string, limit: number = 50): Promise<RealtimeSession[]> {
-    const response = await apiClient.get(`/api/v1/realtime/agents/${agentId}/sessions`, {
-      params: { limit }
-    })
-    return response.data
-  },
-
-  async endSession(sessionId: string): Promise<RealtimeSession> {
-    const response = await apiClient.post(`/api/v1/realtime/sessions/${sessionId}/end`)
     return response.data
   }
 }

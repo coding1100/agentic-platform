@@ -8,11 +8,7 @@
       <div class="header-actions">
         <button @click="goToDocumentation" class="btn-secondary-header">
           📚 Documentation
-        </button>
-        <button @click="goToAvatarEmbeds" class="btn-secondary-header">
-          Avatar Embeds
-        </button>
-        <button @click="showCreateModal = true" class="btn-primary">
+        </button>        <button @click="showCreateModal = true" class="btn-primary">
           + Create API Key
         </button>
       </div>
@@ -482,10 +478,6 @@ function goBack() {
 
 function goToDocumentation() {
   router.push('/api-keys/documentation')
-}
-
-function goToAvatarEmbeds() {
-  router.push('/avatar-embeds')
 }
 
 function closeCreateModal() {
@@ -1614,4 +1606,5 @@ h1 {
   margin-bottom: 4px;
 }
 </style>
+
 

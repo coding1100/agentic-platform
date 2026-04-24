@@ -28,33 +28,6 @@
         </div>
 
         <div class="form-group">
-          <label for="interaction_mode">Interaction Mode *</label>
-          <select id="interaction_mode" v-model="form.interaction_mode">
-            <option value="chat">Chat</option>
-            <option value="avatar_realtime">Avatar Realtime (LiveKit)</option>
-          </select>
-          <small class="hint">Use Avatar Realtime for low-latency A/V interview flows.</small>
-        </div>
-
-        <div v-if="form.interaction_mode === 'avatar_realtime'" class="realtime-group">
-          <h3>Realtime Configuration</h3>
-
-          <div class="form-group">
-            <label for="livekit_agent_name">LiveKit Agent Name *</label>
-            <input
-              id="livekit_agent_name"
-              v-model="form.livekit_agent_name"
-              type="text"
-              placeholder="avatar-interview-agent"
-              maxlength="200"
-              required
-            />
-            <small class="hint">Must match the worker registration name.</small>
-          </div>
-          <small class="hint">Avatar is rendered in the browser. No external avatar provider setup required.</small>
-        </div>
-
-        <div class="form-group">
           <label for="system_prompt">System Prompt *</label>
           <textarea
             id="system_prompt"
@@ -122,9 +95,7 @@ const form = ref({
   description: '',
   system_prompt: '',
   greeting_message: '',
-  temperature: 0.7,
-  interaction_mode: 'chat' as 'chat' | 'avatar_realtime',
-  livekit_agent_name: ''
+  temperature: 0.7
 })
 
 onMounted(async () => {
@@ -146,9 +117,7 @@ onMounted(async () => {
         description: result.agent.description || '',
         system_prompt: result.agent.system_prompt,
         greeting_message: result.agent.greeting_message || '',
-        temperature: result.agent.temperature,
-        interaction_mode: result.agent.interaction_mode || 'chat',
-        livekit_agent_name: result.agent.livekit_agent_name || ''
+        temperature: result.agent.temperature
       }
     }
   }
@@ -157,26 +126,14 @@ onMounted(async () => {
 async function handleSubmit() {
   error.value = ''
 
-  if (form.value.interaction_mode === 'avatar_realtime' && !form.value.livekit_agent_name.trim()) {
-    error.value = 'LiveKit agent name is required for avatar realtime mode.'
-    return
-  }
-
   loading.value = true
 
-  const payload: any = {
+  const payload = {
     name: form.value.name,
     description: form.value.description || null,
     system_prompt: form.value.system_prompt,
     greeting_message: form.value.greeting_message || null,
-    temperature: form.value.temperature,
-    interaction_mode: form.value.interaction_mode
-  }
-
-  if (form.value.interaction_mode === 'avatar_realtime') {
-    payload.livekit_agent_name = form.value.livekit_agent_name.trim()
-    payload.avatar_provider = 'browser'
-    payload.avatar_id = null
+    temperature: form.value.temperature
   }
 
   const agentId = route.params.agentId as string
@@ -225,19 +182,6 @@ h1 {
   margin-bottom: 36px;
   font-size: 32px;
   font-weight: 700;
-}
-
-.realtime-group {
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  border-radius: 14px;
-  padding: 18px;
-  margin-bottom: 20px;
-}
-
-.realtime-group h3 {
-  margin: 0 0 12px;
-  color: white;
 }
 
 .form-grid {

@@ -61,8 +61,7 @@ async def chat_stream(
             title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
         )
         db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
+        db.flush()
         
         # If agent has a greeting message, add it to the conversation
         if agent.greeting_message:
@@ -72,14 +71,13 @@ async def chat_stream(
                 content=agent.greeting_message,
             )
             db.add(greeting_message)
-            db.commit()
     
     # Get recent message history
     recent_messages = (
         db.query(Message)
         .filter(Message.conversation_id == conversation.id)
         .order_by(Message.created_at.desc())
-        .limit(10)
+        .limit(8)
         .all()
     )
     recent_messages.reverse()
@@ -91,7 +89,7 @@ async def chat_stream(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.commit()
+    db.flush()
     
     # Generate streaming response
     agent_service = LangchainAgentService()

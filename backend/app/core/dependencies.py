@@ -4,13 +4,17 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
 from uuid import UUID
+from threading import Lock
+from collections import defaultdict
+from urllib.parse import urlparse
 from app.core.database import get_db
 from app.core.security import decode_access_token, verify_api_key
 from app.models.user import User
 from app.models.api_key import ApiKey
-from app.models.api_key_usage_daily import ApiKeyUsageDaily
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+_rate_limit_lock = Lock()
+_rate_limit_state = defaultdict(lambda: {"window_start": None, "count": 0})
 
 
 async def get_current_user(
@@ -25,7 +29,6 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Allow token via Authorization header or access_token cookie
     if not token:
         token = request.cookies.get("access_token")
     if not token:
@@ -52,21 +55,45 @@ async def get_current_user(
 
 
 def _extract_api_key_id_from_plain_key(plain_key: str) -> Optional[UUID]:
-    """Extract embedded ApiKey ID from the plain key if present.
-
-    New-format keys look like: ak_<uuidhex>_<random>.
-    Old-format keys won't match this pattern and will return None.
-    """
+    """Extract embedded ApiKey ID from key format ak_<uuidhex>_<random>."""
     try:
         if not plain_key or not plain_key.startswith("ak_"):
             return None
         parts = plain_key.split("_", 2)
         if len(parts) < 3:
             return None
-        # parts[1] should be the UUID hex
         return UUID(hex=parts[1])
     except Exception:
         return None
+
+
+def _extract_request_origin(request: Request, origin_header: Optional[str]) -> Optional[str]:
+    if origin_header:
+        return origin_header
+    referer = request.headers.get("Referer")
+    if not referer:
+        return None
+    try:
+        parsed = urlparse(referer)
+        return f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        return None
+
+
+def _enforce_rate_limit(key_id: str, limit: int, now: datetime) -> None:
+    with _rate_limit_lock:
+        state = _rate_limit_state[key_id]
+        window_start = state["window_start"]
+        if not window_start or now - window_start >= timedelta(minutes=1):
+            state["window_start"] = now
+            state["count"] = 1
+            return
+        if state["count"] >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="API key rate limit exceeded. Please slow down.",
+            )
+        state["count"] += 1
 
 
 async def get_api_key_user(
@@ -75,72 +102,39 @@ async def get_api_key_user(
     origin: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Get user and API key from API key authentication. Returns (user, api_key).
-
-    Also validates domain whitelisting if configured for the API key.
-    """
+    """Validate API key and return (user, api_key)."""
     if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key is required. Provide it in the X-API-Key header.",
         )
 
-    # Get origin from header (fallback to Referer if Origin not present)
-    request_origin = origin
-    if not request_origin:
-        referer = request.headers.get("Referer")
-        if referer:
-            # Extract origin from Referer (e.g., "https://example.com/path" -> "https://example.com")
-            try:
-                from urllib.parse import urlparse
-
-                parsed = urlparse(referer)
-                request_origin = f"{parsed.scheme}://{parsed.netloc}"
-            except Exception:
-                # If origin parsing fails, leave request_origin as None and handle below.
-                pass
-
     now = datetime.utcnow()
+    request_origin = _extract_request_origin(request, origin)
 
-    # Fast path: try to extract ApiKey ID from the plain key (new-format keys).
-    matching_key: Optional[ApiKey] = None
     key_id = _extract_api_key_id_from_plain_key(x_api_key)
-    if key_id is not None:
-        candidate = (
-            db.query(ApiKey)
-            .filter(
-                ApiKey.id == key_id,
-                ApiKey.is_active.is_(True),
-                (ApiKey.expires_at.is_(None) | (ApiKey.expires_at >= now)),
-            )
-            .first()
-        )
-        if candidate and verify_api_key(x_api_key, candidate.key_hash):
-            matching_key = candidate
-
-    # Fallback path: legacy keys without embedded ID – O(n) scan over active keys.
-    if matching_key is None:
-        api_keys = (
-            db.query(ApiKey)
-            .filter(
-                ApiKey.is_active.is_(True),
-                (ApiKey.expires_at.is_(None) | (ApiKey.expires_at >= now)),
-            )
-            .all()
+    if key_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Legacy API key format is no longer supported. Rotate and use a new API key.",
         )
 
-        for key in api_keys:
-            if verify_api_key(x_api_key, key.key_hash):
-                matching_key = key
-                break
+    matching_key = (
+        db.query(ApiKey)
+        .filter(
+            ApiKey.id == key_id,
+            ApiKey.is_active.is_(True),
+            (ApiKey.expires_at.is_(None) | (ApiKey.expires_at >= now)),
+        )
+        .first()
+    )
 
-    if not matching_key:
+    if not matching_key or not verify_api_key(x_api_key, matching_key.key_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
 
-    # Validate domain whitelisting (allows server-to-server when origin is missing)
     if not matching_key.is_origin_allowed(request_origin):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -150,42 +144,8 @@ async def get_api_key_user(
             ),
         )
 
-    # Enforce per-key rate limits (simple fixed window)
-    window_start = matching_key.rate_limit_window_start
-    if not window_start or now - window_start >= timedelta(minutes=1):
-        matching_key.rate_limit_window_start = now
-        matching_key.rate_limit_window_count = 1
-    else:
-        if matching_key.rate_limit_window_count >= matching_key.rate_limit_per_minute:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="API key rate limit exceeded. Please slow down.",
-            )
-        matching_key.rate_limit_window_count += 1
+    _enforce_rate_limit(str(matching_key.id), matching_key.rate_limit_per_minute, now)
 
-    # Update last used timestamp and aggregate usage
-    matching_key.last_used_at = now
-    matching_key.total_requests += 1
-
-    # Update daily usage stats
-    usage_date = now.date()
-    usage = db.query(ApiKeyUsageDaily).filter(
-        ApiKeyUsageDaily.api_key_id == matching_key.id,
-        ApiKeyUsageDaily.usage_date == usage_date,
-    ).first()
-    if usage:
-        usage.request_count += 1
-    else:
-        usage = ApiKeyUsageDaily(
-            api_key_id=matching_key.id,
-            usage_date=usage_date,
-            request_count=1,
-        )
-        db.add(usage)
-
-    db.commit()
-
-    # Get user
     user = db.query(User).filter(User.id == matching_key.user_id).first()
     if not user:
         raise HTTPException(
@@ -194,4 +154,3 @@ async def get_api_key_user(
         )
 
     return user, matching_key
- 

@@ -9,12 +9,10 @@ from app.api.v1 import (
     public,
     state,
     tutor,
-    realtime,
-    realtime_public,
-    realtime_webhooks,
 )
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.observability import RequestTimingMiddleware
 from app.services.prebuilt_agents import seed_prebuilt_agents
 
 app = FastAPI(
@@ -22,6 +20,7 @@ app = FastAPI(
     description="Multi-tenant AI agent platform",
     version="1.0.0"
 )
+app.add_middleware(RequestTimingMiddleware)
 
 # CORS middleware - allows cross-origin requests for API endpoints
 # This enables other platforms to use your APIs from any domain
@@ -56,11 +55,8 @@ app.include_router(conversations.router, prefix="/api/v1/conversations", tags=["
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["api-keys"])
 app.include_router(public.router, prefix="/api/v1/public", tags=["public"])
-app.include_router(realtime_public.router, prefix="/api/v1/public/realtime", tags=["public-realtime"])
 app.include_router(state.router, prefix="/api/v1/state", tags=["state"])
 app.include_router(tutor.router, prefix="/api/v1/tutor", tags=["tutor"])
-app.include_router(realtime.router, prefix="/api/v1/realtime", tags=["realtime"])
-app.include_router(realtime_webhooks.router, prefix="/api/v1/realtime/webhooks", tags=["realtime-webhooks"])
 
 # Import and include streaming router
 from app.api.v1 import chat_stream

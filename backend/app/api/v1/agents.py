@@ -7,7 +7,6 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.agent import Agent
 from app.schemas.agent import AgentCreate, AgentUpdate, AgentResponse
-from app.services.prebuilt_agents import ensure_prebuilt_agents_seeded
 
 router = APIRouter()
 
@@ -18,8 +17,6 @@ async def list_agents(
     db: Session = Depends(get_db)
 ):
     """List all agents for the current user."""
-    ensure_prebuilt_agents_seeded(db)
-
     # User-owned agents
     user_agents = db.query(Agent).filter(Agent.user_id == current_user.id).all()
 
@@ -40,13 +37,7 @@ async def create_agent(
     db: Session = Depends(get_db)
 ):
     """Create a new agent."""
-    payload = agent_data.model_dump()
-    if payload.get("interaction_mode") == "chat":
-        payload["livekit_agent_name"] = None
-        payload["avatar_provider"] = None
-        payload["avatar_id"] = None
-        payload["realtime_config"] = None
-    new_agent = Agent(user_id=current_user.id, **payload)
+    new_agent = Agent(user_id=current_user.id, **agent_data.model_dump())
     db.add(new_agent)
     db.commit()
     db.refresh(new_agent)
@@ -100,23 +91,7 @@ async def update_agent(
             detail="Agent not found"
         )
     
-    update_data = agent_data.model_dump(exclude_unset=True)
-
-    target_interaction_mode = update_data.get("interaction_mode", agent.interaction_mode)
-    target_livekit_agent_name = update_data.get("livekit_agent_name", agent.livekit_agent_name)
-    if target_interaction_mode == "avatar_realtime" and not target_livekit_agent_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="livekit_agent_name is required when interaction_mode is avatar_realtime",
-        )
-
-    if target_interaction_mode == "chat":
-        update_data["livekit_agent_name"] = None
-        update_data["avatar_provider"] = None
-        update_data["avatar_id"] = None
-        update_data["realtime_config"] = None
-
-    for field, value in update_data.items():
+    for field, value in agent_data.model_dump(exclude_unset=True).items():
         setattr(agent, field, value)
     
     db.commit()

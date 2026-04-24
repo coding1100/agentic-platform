@@ -159,10 +159,6 @@ const isFitnessCoachAgent = computed(() => {
 
 onMounted(async () => {
   await agentsStore.fetchAgent(agentId)
-  if (agent.value?.interaction_mode === 'avatar_realtime') {
-    router.replace(`/agents/${agentId}/avatar`)
-    return
-  }
   
   // Try to load existing conversation or create new one with greeting
   const conversationId = route.query.conversation_id as string

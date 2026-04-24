@@ -11,6 +11,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.pronunciation import PronunciationAssessmentRequest, PronunciationAssessmentResponse
 from app.services.langchain_client import LangchainAgentService
 from app.services.gemini import GeminiClient
+from datetime import datetime
 
 router = APIRouter()
 
@@ -60,8 +61,7 @@ def chat(
             title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
         )
         db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
+        db.flush()
         
         # If agent has a greeting message, add it to the conversation
         if agent.greeting_message:
@@ -71,14 +71,13 @@ def chat(
                 content=agent.greeting_message,
             )
             db.add(greeting_message)
-            db.commit()
     
-    # Get recent message history BEFORE saving current message (last 10 messages for context and performance)
+    # Get recent message history BEFORE saving current message.
     recent_messages = (
         db.query(Message)
         .filter(Message.conversation_id == conversation.id)
         .order_by(Message.created_at.desc())
-        .limit(10)
+        .limit(8)
         .all()
     )
 
@@ -92,8 +91,7 @@ def chat(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.commit()
-    db.refresh(user_message)
+    db.flush()
 
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -121,6 +119,7 @@ def chat(
         import traceback
         error_trace = traceback.format_exc()
         print(f"Error generating response: {error_trace}")  # Log to console for debugging
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating response: {str(e)}",
@@ -133,14 +132,11 @@ def chat(
         content=assistant_response,
     )
     db.add(assistant_message)
-    db.commit()
-    db.refresh(assistant_message)
-
-    # Update conversation updated_at
-    from datetime import datetime
 
     conversation.updated_at = datetime.utcnow()
     db.commit()
+    db.refresh(user_message)
+    db.refresh(assistant_message)
 
     return ChatResponse(
         conversation_id=conversation.id,

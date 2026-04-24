@@ -12,7 +12,6 @@ from app.models.message import Message, MessageRole
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.agent import AgentResponse
 from app.services.langchain_client import LangchainAgentService
-from app.services.prebuilt_agents import ensure_prebuilt_agents_seeded
 from datetime import datetime
 
 router = APIRouter()
@@ -24,9 +23,7 @@ def list_public_agents(
     db: Session = Depends(get_db)
 ):
     """List all available prebuilt agents (public API)."""
-    ensure_prebuilt_agents_seeded(db)
-
-    current_user, api_key = user_and_key
+    _, api_key = user_and_key
     
     # If agent_id is null, return all prebuilt agents (universal key)
     if api_key.agent_id is None:
@@ -53,9 +50,7 @@ def get_public_agent(
     db: Session = Depends(get_db)
 ):
     """Get a specific agent by slug (public API)."""
-    ensure_prebuilt_agents_seeded(db)
-
-    current_user, api_key = user_and_key
+    _, api_key = user_and_key
     
     # Find the agent by slug
     agent = db.query(Agent).filter(
@@ -88,8 +83,6 @@ def public_chat(
     db: Session = Depends(get_db)
 ):
     """Send a message to an agent via public API (using agent slug)."""
-    ensure_prebuilt_agents_seeded(db)
-
     current_user, api_key = user_and_key
     
     # Find the agent by slug
@@ -134,8 +127,7 @@ def public_chat(
             title=chat_request.message[:50] if len(chat_request.message) > 50 else chat_request.message
         )
         db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
+        db.flush()
         
         # If agent has a greeting message, add it to the conversation
         if agent.greeting_message:
@@ -145,14 +137,13 @@ def public_chat(
                 content=agent.greeting_message,
             )
             db.add(greeting_message)
-            db.commit()
     
-    # Get recent message history (last 10 messages for context)
+    # Get recent message history.
     recent_messages = (
         db.query(Message)
         .filter(Message.conversation_id == conversation.id)
         .order_by(Message.created_at.desc())
-        .limit(10)
+        .limit(8)
         .all()
     )
     
@@ -166,8 +157,7 @@ def public_chat(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.commit()
-    db.refresh(user_message)
+    db.flush()
     
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -185,6 +175,7 @@ def public_chat(
         import traceback
         error_trace = traceback.format_exc()
         print(f"Error generating response: {error_trace}")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating response: {str(e)}",
@@ -197,12 +188,10 @@ def public_chat(
         content=assistant_response,
     )
     db.add(assistant_message)
-    db.commit()
-    db.refresh(assistant_message)
-    
-    # Update conversation updated_at
     conversation.updated_at = datetime.utcnow()
     db.commit()
+    db.refresh(user_message)
+    db.refresh(assistant_message)
     
     return ChatResponse(
         conversation_id=conversation.id,
@@ -221,8 +210,6 @@ def create_public_conversation(
     db: Session = Depends(get_db)
 ):
     """Create a new conversation for an agent (public API)."""
-    ensure_prebuilt_agents_seeded(db)
-
     current_user, api_key = user_and_key
     
     # Find the agent by slug
@@ -252,8 +239,7 @@ def create_public_conversation(
         title=title or "New Conversation"
     )
     db.add(conversation)
-    db.commit()
-    db.refresh(conversation)
+    db.flush()
     
     # If agent has a greeting message, add it to the conversation
     if agent.greeting_message:
@@ -263,7 +249,8 @@ def create_public_conversation(
             content=agent.greeting_message,
         )
         db.add(greeting_message)
-        db.commit()
+    db.commit()
+    db.refresh(conversation)
     
     return {
         "id": conversation.id,

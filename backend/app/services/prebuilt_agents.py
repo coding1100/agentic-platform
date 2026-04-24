@@ -620,25 +620,15 @@ def seed_prebuilt_agents(db: Session) -> None:
     {
       "slug": PREBUILT_AGENT_SLUGS["interview_prep_agent"],
       "name": "Interview Prep Agent",
-      "description": "A realtime interview coach with browser-rendered avatar experience and low-latency voice conversation.",
+      "description": "A structured mock interview coach for role-specific practice and actionable feedback.",
       "category": "career",
-      "interaction_mode": "avatar_realtime",
-      "livekit_agent_name": "avatar-interview-agent",
-      "avatar_provider": "browser",
-      "avatar_id": None,
-      "realtime_config": {
-        "opening_prompt": "Introduce yourself as the interviewer and ask the candidate the first interview question.",
-        "stt_model": "deepgram/nova-3-general:en",
-        "tts_model": "cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-      },
       "system_prompt": (
         "You are a professional interviewer conducting realistic mock interviews for job candidates. "
         "Ask one strong interview question at a time, listen carefully, ask concise follow-up questions, "
         "and evaluate clarity, structure, and role fit. Keep responses practical and interview-focused."
       ),
       "greeting_message": (
-        "Welcome to Interview Prep Agent. This session uses realtime avatar mode for realistic mock interviews. "
-        "Share your target role and I will begin with your first interview question."
+        "Welcome to Interview Prep Agent. Share your target role and I will begin with your first interview question."
       ),
     },
   ]
@@ -667,11 +657,6 @@ def seed_prebuilt_agents(db: Session) -> None:
       existing.is_prebuilt = True
       existing.is_active = True
       existing.category = definition["category"]
-      existing.interaction_mode = definition.get("interaction_mode", "chat")
-      existing.livekit_agent_name = definition.get("livekit_agent_name")
-      existing.avatar_provider = definition.get("avatar_provider")
-      existing.avatar_id = definition.get("avatar_id")
-      existing.realtime_config = definition.get("realtime_config")
       # Update greeting message if provided
       if "greeting_message" in definition:
         existing.greeting_message = definition["greeting_message"]
@@ -693,11 +678,6 @@ def seed_prebuilt_agents(db: Session) -> None:
       category=definition["category"],
       is_prebuilt=True,
       is_active=True,
-      interaction_mode=definition.get("interaction_mode", "chat"),
-      livekit_agent_name=definition.get("livekit_agent_name"),
-      avatar_provider=definition.get("avatar_provider"),
-      avatar_id=definition.get("avatar_id"),
-      realtime_config=definition.get("realtime_config"),
     )
     db.add(agent)
 

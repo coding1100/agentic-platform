@@ -16,8 +16,6 @@ from app.models import (
     Conversation,
     Message,
     ApiKey,
-    AgentEmbedDeployment,
-    RealtimeSession,
 )
 
 # this is the Alembic Config object, which provides

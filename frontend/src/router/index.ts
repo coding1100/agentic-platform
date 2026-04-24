@@ -42,12 +42,6 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/agents/:agentId/avatar',
-      name: 'AvatarInterview',
-      component: () => import('@/views/AvatarInterview.vue'),
-      meta: { requiresAuth: true }
-    },
-    {
       path: '/agents/:agentId/resume-review',
       name: 'ResumeReview',
       component: () => import('@/views/ResumeReview.vue'),
@@ -94,18 +88,6 @@ const router = createRouter({
       name: 'ApiDocumentation',
       component: () => import('@/views/ApiDocumentation.vue'),
       meta: { requiresAuth: true }
-    },
-    {
-      path: '/avatar-embeds',
-      name: 'AvatarEmbeds',
-      component: () => import('@/views/AvatarEmbeds.vue'),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/embed/:embedId',
-      name: 'EmbedAvatar',
-      component: () => import('@/views/EmbedAvatar.vue'),
-      meta: { requiresAuth: false }
     },
     {
       path: '/',

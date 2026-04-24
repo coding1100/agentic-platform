@@ -3,7 +3,6 @@
     <header class="dashboard-header">
       <h1>My Agents</h1>
       <div class="header-actions">
-        <button @click="goToAvatarEmbeds" class="btn-secondary">Video Embeds</button>
         <button @click="goToApiKeys" class="btn-secondary">API Keys</button>
         <button @click="handleLogout" class="btn-secondary">Logout</button>
         <button @click="goToNewAgent" class="btn-primary">+ New Agent</button>
@@ -51,9 +50,6 @@
           <div v-if="agent.is_prebuilt" class="prebuilt-badge">
             <span>Pre-built</span>
           </div>
-          <div v-if="agent.interaction_mode === 'avatar_realtime'" class="avatar-badge">
-            <span>Avatar Realtime</span>
-          </div>
         </div>
       </div>
     </main>
@@ -83,15 +79,7 @@ function goToChat(agentId: string) {
   router.push(`/agents/${agentId}/chat`)
 }
 
-function goToAvatar(agentId: string) {
-  router.push(`/agents/${agentId}/avatar`)
-}
-
 function openAgent(agent: Agent) {
-  if (agent.interaction_mode === 'avatar_realtime') {
-    goToAvatar(agent.id)
-    return
-  }
   goToChat(agent.id)
 }
 
@@ -107,10 +95,6 @@ async function deleteAgent(agentId: string) {
 
 function goToApiKeys() {
   router.push('/api-keys')
-}
-
-function goToAvatarEmbeds() {
-  router.push('/avatar-embeds')
 }
 
 function handleLogout() {
@@ -312,8 +296,7 @@ h1 {
   font-size: 15px;
 }
 
-.prebuilt-badge,
-.avatar-badge {
+.prebuilt-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -327,11 +310,5 @@ h1 {
 
 .prebuilt-badge {
   background: rgba(255, 255, 255, 0.2);
-}
-
-.avatar-badge {
-  margin-left: 8px;
-  background: rgba(56, 189, 248, 0.25);
-  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 </style>

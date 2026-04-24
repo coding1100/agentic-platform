@@ -4,14 +4,6 @@ from app.schemas.conversation import ConversationCreate, ConversationResponse
 from app.schemas.message import MessageCreate, MessageResponse
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.state import UserStateUpsert, UserStateResponse
-from app.schemas.realtime import (
-    EmbedDeploymentUpsert,
-    EmbedDeploymentResponse,
-    RealtimeTokenRequest,
-    RealtimeTokenResponse,
-    RealtimeSessionResponse,
-    RealtimeSessionEndRequest,
-)
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "Token",
@@ -20,7 +12,5 @@ __all__ = [
     "MessageCreate", "MessageResponse",
     "ChatRequest", "ChatResponse",
     "UserStateUpsert", "UserStateResponse",
-    "EmbedDeploymentUpsert", "EmbedDeploymentResponse",
-    "RealtimeTokenRequest", "RealtimeTokenResponse", "RealtimeSessionResponse", "RealtimeSessionEndRequest",
 ]
 
