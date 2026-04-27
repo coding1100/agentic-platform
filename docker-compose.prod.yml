@@ -17,6 +17,16 @@ services:
     networks:
       - agentic_platform_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: agentic_platform_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - agentic_platform_network
+
   backend:
     image: agentic-platform-backend
     build:
@@ -27,6 +37,7 @@ services:
     container_name: agentic_platform_backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-agentic_user}:${POSTGRES_PASSWORD:-agentic_password}@postgres:5432/${POSTGRES_DB:-agentic_platform}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -38,6 +49,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
     networks:
       - agentic_platform_network
@@ -60,6 +73,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   agentic_platform_network:

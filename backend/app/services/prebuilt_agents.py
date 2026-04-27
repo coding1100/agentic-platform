@@ -660,9 +660,9 @@ def seed_prebuilt_agents(db: Session) -> None:
       # Update greeting message if provided
       if "greeting_message" in definition:
         existing.greeting_message = definition["greeting_message"]
-      # Update model to latest default if it's the old version
-      if existing.model == "gemini-1.5-pro":
-        existing.model = "gemini-2.5-pro"
+      # Update model to fast default for production chat latency.
+      if existing.model in {"gemini-1.5-pro", "gemini-2.5-pro"}:
+        existing.model = "gemini-2.5-flash"
       db.commit()
       continue
 
@@ -672,7 +672,7 @@ def seed_prebuilt_agents(db: Session) -> None:
       description=definition["description"],
       system_prompt=definition["system_prompt"],
       greeting_message=definition.get("greeting_message"),
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.4,
       slug=definition["slug"],
       category=definition["category"],

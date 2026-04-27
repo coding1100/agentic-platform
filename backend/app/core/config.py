@@ -19,12 +19,33 @@ class Settings(BaseSettings):
     
     # Gemini API
     GEMINI_API_KEY: str = ""
+
+    # Redis (optional, recommended in production)
+    REDIS_URL: str = ""
     
     # CORS
     # For frontend web app - restrict to specific origins
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     # For public API access - allow all origins (set to ["*"] to allow any origin)
     CORS_ORIGINS_API: List[str] = ["*"]  # Allow all origins for API endpoints
+
+    # Observability / request timing logs
+    REQUEST_TIMING_LOG_ENABLED: bool = True
+    REQUEST_TIMING_LOG_SAMPLE_RATE: float = 0.1
+    REQUEST_TIMING_LOG_MIN_MS: int = 300
+
+    # API key auth/rate-limit performance
+    API_KEY_AUTH_CACHE_TTL_SECONDS: int = 60
+    API_KEY_RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # LLM prompt guardrails
+    # Set to 0 to disable truncation.
+    SYSTEM_PROMPT_MAX_CHARS: int = 0
+
+    # LLM output caps (configurable per deployment/use-case).
+    LLM_MAX_OUTPUT_TOKENS: int = 1024
+    LLM_MAX_OUTPUT_TOKENS_LONGFORM: int = 2048
+    TUTOR_MAX_OUTPUT_TOKENS: int = 2048
     
     class Config:
         env_file = ".env"

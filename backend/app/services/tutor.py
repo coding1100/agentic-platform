@@ -129,7 +129,7 @@ class TutorWorkspaceService:
                 "temperature": 0.4,
                 "top_p": 0.9,
                 "top_k": 32,
-                "max_output_tokens": 8192,
+                "max_output_tokens": settings.TUTOR_MAX_OUTPUT_TOKENS,
                 "response_mime_type": "application/json",
             },
         )

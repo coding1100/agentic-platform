@@ -89,14 +89,15 @@ async def chat_stream(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.flush()
+    conversation.updated_at = datetime.utcnow()
+    db.commit()
     
     # Generate streaming response
     agent_service = LangchainAgentService()
-    full_response = ""
+    full_response_chunks: list[str] = []
     
     async def generate():
-        nonlocal full_response
+        nonlocal full_response_chunks
         try:
             async for chunk in agent_service.stream_response(
                 agent=agent,
@@ -104,7 +105,7 @@ async def chat_stream(
                 latest_input=chat_request.message,
             ):
                 if chunk:
-                    full_response += chunk
+                    full_response_chunks.append(chunk)
                     # Format as SSE (Server-Sent Events) compatible with Vercel AI SDK
                     # Format: data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{"content":"chunk"}}]}
                     data = {
@@ -139,7 +140,7 @@ async def chat_stream(
             assistant_message = Message(
                 conversation_id=conversation.id,
                 role=MessageRole.ASSISTANT,
-                content=full_response,
+                content="".join(full_response_chunks),
             )
             db.add(assistant_message)
             conversation.updated_at = datetime.utcnow()

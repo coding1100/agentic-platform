@@ -9,7 +9,7 @@ class AgentCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     system_prompt: str = Field(..., min_length=1)
     greeting_message: Optional[str] = Field(None, max_length=2000)
-    model: str = Field(default="gemini-2.5-pro")
+    model: str = Field(default="gemini-2.5-flash")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
 

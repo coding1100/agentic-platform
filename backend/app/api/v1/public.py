@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
+import logging
 from app.core.database import get_db
 from app.core.dependencies import get_api_key_user
 from app.models.user import User
@@ -15,6 +16,7 @@ from app.services.langchain_client import LangchainAgentService
 from datetime import datetime
 
 router = APIRouter()
+logger = logging.getLogger("app.api.public")
 
 
 @router.get("/agents", response_model=List[AgentResponse])
@@ -157,7 +159,8 @@ def public_chat(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.flush()
+    conversation.updated_at = datetime.utcnow()
+    db.commit()
     
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -172,10 +175,7 @@ def public_chat(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error generating response: {error_trace}")
-        db.rollback()
+        logger.exception("Error generating response")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating response: {str(e)}",
@@ -190,8 +190,6 @@ def public_chat(
     db.add(assistant_message)
     conversation.updated_at = datetime.utcnow()
     db.commit()
-    db.refresh(user_message)
-    db.refresh(assistant_message)
     
     return ChatResponse(
         conversation_id=conversation.id,
@@ -250,7 +248,6 @@ def create_public_conversation(
         )
         db.add(greeting_message)
     db.commit()
-    db.refresh(conversation)
     
     return {
         "id": conversation.id,

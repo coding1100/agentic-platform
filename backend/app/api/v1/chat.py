@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
+import logging
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
@@ -14,6 +15,7 @@ from app.services.gemini import GeminiClient
 from datetime import datetime
 
 router = APIRouter()
+logger = logging.getLogger("app.api.chat")
 
 
 @router.post("/{agent_id}", response_model=ChatResponse)
@@ -91,7 +93,8 @@ def chat(
         content=chat_request.message,
     )
     db.add(user_message)
-    db.flush()
+    conversation.updated_at = datetime.utcnow()
+    db.commit()
 
     # Generate response using LangChain + Gemini (tools enabled for prebuilt agents)
     try:
@@ -104,22 +107,15 @@ def chat(
         if not assistant_response or not isinstance(assistant_response, str):
             raise ValueError(f"Invalid response type: {type(assistant_response)}")
         
-        # Log response for debugging (first 200 chars)
-        print(f"Agent response preview: {assistant_response[:200]}...")
-        
         # For quiz requests, ensure response is properly formatted
         if "quiz" in chat_request.message.lower() or "question" in chat_request.message.lower():
             # Check if response contains quiz format
             if "**Question 1:**" not in assistant_response and "Question 1:" not in assistant_response:
-                print("WARNING: Quiz requested but response doesn't contain Question 1 format")
-                print(f"Full response: {assistant_response[:500]}")
+                logger.warning("Quiz requested but response does not contain expected format")
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error generating response: {error_trace}")  # Log to console for debugging
-        db.rollback()
+        logger.exception("Error generating response")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating response: {str(e)}",
@@ -135,8 +131,6 @@ def chat(
 
     conversation.updated_at = datetime.utcnow()
     db.commit()
-    db.refresh(user_message)
-    db.refresh(assistant_message)
 
     return ChatResponse(
         conversation_id=conversation.id,
@@ -192,7 +186,7 @@ Be encouraging but honest. Provide specific, actionable feedback."""
         response = gemini_client.generate_response(
             system_prompt="You are an expert language pronunciation assessor. Always respond with valid JSON in the exact format specified.",
             messages=[{"role": "user", "content": prompt}],
-            model="gemini-2.5-pro",
+            model="gemini-2.5-flash",
             temperature=0.3
         )
         
@@ -240,9 +234,7 @@ Be encouraging but honest. Provide specific, actionable feedback."""
         )
         
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error assessing pronunciation: {error_trace}")
+        logger.exception("Error assessing pronunciation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error assessing pronunciation: {str(e)}",

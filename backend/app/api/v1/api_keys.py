@@ -6,6 +6,7 @@ from typing import List
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.dependencies import invalidate_api_key_cache
 from app.core.security import generate_api_key, hash_api_key
 from app.models.user import User
 from app.models.api_key import ApiKey
@@ -80,6 +81,7 @@ async def create_api_key(
     api_key.key_hash = hash_api_key(final_plain)
     db.commit()
     db.refresh(api_key)
+    invalidate_api_key_cache(str(api_key.id))
     
     # Return response with the plain key (only shown once)
     response = ApiKeyResponse(
@@ -154,6 +156,7 @@ async def delete_api_key(
     
     db.delete(api_key)
     db.commit()
+    invalidate_api_key_cache(str(api_key_id))
     
     return None
 
@@ -180,6 +183,7 @@ async def toggle_api_key(
     api_key.is_active = not api_key.is_active
     db.commit()
     db.refresh(api_key)
+    invalidate_api_key_cache(str(api_key.id))
     
     agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
     return ApiKeyResponse(
@@ -276,6 +280,7 @@ async def update_api_key(
     
     db.commit()
     db.refresh(api_key)
+    invalidate_api_key_cache(str(api_key.id))
     
     agent = db.query(Agent).filter(Agent.id == api_key.agent_id).first()
     return ApiKeyResponse(

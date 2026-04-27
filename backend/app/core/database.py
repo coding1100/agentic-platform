@@ -12,7 +12,12 @@ engine = create_engine(
     pool_recycle=1800,  # recycle connections every 30 minutes
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+    bind=engine,
+)
 
 Base = declarative_base()
 

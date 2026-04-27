@@ -1,11 +1,13 @@
 from typing import List, Any
 import warnings
+import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from app.core.config import settings
 from app.models.agent import Agent
 from app.models.message import Message
+from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
 
 # Suppress specific warnings from langchain/google libraries
 warnings.filterwarnings('ignore', message='.*Unrecognized FinishReason enum value.*')
@@ -15,6 +17,7 @@ warnings.filterwarnings('ignore', message='.*Gemini produced an empty response.*
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_CHARS = 4000
 MAX_INPUT_CHARS = 8000
+logger = logging.getLogger("app.services.langchain_client")
 
 
 class LangchainAgentService:
@@ -27,10 +30,15 @@ class LangchainAgentService:
 
   def _build_llm(self, agent: Agent) -> ChatGoogleGenerativeAI:
     """Build the ChatGoogleGenerativeAI LLM instance."""
+    max_tokens = settings.LLM_MAX_OUTPUT_TOKENS
+    if getattr(agent, "category", None) in {"education", "career"}:
+      max_tokens = settings.LLM_MAX_OUTPUT_TOKENS_LONGFORM
+
     return ChatGoogleGenerativeAI(
       model=agent.model,
       temperature=agent.temperature,
       google_api_key=self._api_key,
+      max_output_tokens=max_tokens,
       max_retries=1,
       timeout=45,
     )
@@ -119,13 +127,23 @@ class LangchainAgentService:
     """
     # Check if this is a quiz/exam request - intercept and generate directly
     latest_lower = latest_input.lower() if latest_input else ""
-    is_quiz_request = (
-      "quiz" in latest_lower or 
-      "generate" in latest_lower and ("question" in latest_lower or "mcq" in latest_lower) or
+    agent_slug = agent.slug if agent.is_prebuilt else None
+
+    is_exam_agent = agent_slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]
+    is_micro_agent = agent_slug == PREBUILT_AGENT_SLUGS["micro_learning_agent"]
+    is_quiz_agent = agent_slug in {
+      PREBUILT_AGENT_SLUGS["personal_tutor"],
+      PREBUILT_AGENT_SLUGS["course_creation_agent"],
+      PREBUILT_AGENT_SLUGS["language_practice_agent"],
+    }
+
+    is_quiz_request = is_quiz_agent and (
+      "quiz" in latest_lower or
+      ("generate" in latest_lower and ("question" in latest_lower or "mcq" in latest_lower)) or
       "multiple choice" in latest_lower
     )
-    
-    is_exam_request = (
+
+    is_exam_request = is_exam_agent and (
       "practice exam" in latest_lower or
       "create_practice_exam" in latest_lower or
       ("generate" in latest_lower and "exam" in latest_lower and "practice" in latest_lower)
@@ -133,8 +151,8 @@ class LangchainAgentService:
     
     # If it's an exam request for exam prep agent, generate directly
     if is_exam_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _create_practice_exam
-      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+      from app.tools.prebuilt_agents import _create_practice_exam
+      if is_exam_agent:
         # Extract exam parameters from the request - handle multiple formats
         import re
         
@@ -178,7 +196,10 @@ class LangchainAgentService:
         
         # Generate exam directly using the tool (single API call)
         try:
-          print(f"🎯 Intercepting exam request: exam_type={exam_type}, subject={subject}, num_questions={num_questions}, difficulty={difficulty}")
+          logger.debug(
+            "Intercepting exam request exam_type=%s subject=%s num_questions=%s difficulty=%s",
+            exam_type, subject, num_questions, difficulty
+          )
           exam_output = _create_practice_exam(
             exam_type=exam_type,
             subject=subject,
@@ -186,40 +207,39 @@ class LangchainAgentService:
             time_limit=time_limit,
             difficulty=difficulty
           )
-          print(f"✅ Exam generated successfully, length: {len(exam_output)} chars")
-          print(f"📝 Exam preview: {exam_output[:300]}...")
+          logger.debug("Exam generated successfully length=%s", len(exam_output))
           return exam_output
         except Exception as e:
           import traceback
-          print(f"❌ Exam generation tool failed: {traceback.format_exc()}")
+          logger.exception("Exam generation tool failed")
           # Fallback to normal generation if tool fails
-          print(f"Exam generation tool failed, falling back to normal generation: {str(e)}")
+          logger.warning("Exam tool failed; falling back to normal generation: %s", str(e))
     
     # Check for schedule, weak areas, and topic review requests - intercept and generate directly
-    is_schedule_request = (
+    is_schedule_request = is_exam_agent and (
       "create_study_schedule" in latest_lower or
       ("study" in latest_lower and "schedule" in latest_lower)
     )
     
-    is_weak_areas_request = (
+    is_weak_areas_request = is_exam_agent and (
       "identify_weak_areas" in latest_lower or
       ("weak" in latest_lower and "area" in latest_lower and "analysis" in latest_lower)
     )
     
-    is_topic_review_request = (
+    is_topic_review_request = is_exam_agent and (
       "generate_topic_review" in latest_lower or
       ("topic" in latest_lower and "review" in latest_lower)
     )
 
-    is_micro_lesson_request = (
+    is_micro_lesson_request = is_micro_agent and (
       "generate_micro_lesson" in latest_lower or
       ("micro-lesson" in latest_lower or "micro lesson" in latest_lower) and "lesson" in latest_lower
     )
     
     # If it's a schedule request for exam prep agent, generate directly
     if is_schedule_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _create_study_schedule
-      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+      from app.tools.prebuilt_agents import _create_study_schedule
+      if is_exam_agent:
         import re
         # Extract parameters
         exam_date_match = re.search(r'exam_date[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
@@ -236,23 +256,26 @@ class LangchainAgentService:
         
         if exam_date:
           try:
-            print(f"🎯 Intercepting schedule request: exam_date={exam_date}, subjects={subjects}, hours_per_day={hours_per_day}, current_level={current_level}")
+            logger.debug(
+              "Intercepting schedule request exam_date=%s subjects=%s hours_per_day=%s current_level=%s",
+              exam_date, subjects, hours_per_day, current_level
+            )
             schedule_output = _create_study_schedule(
               exam_date=exam_date,
               subjects=subjects,
               hours_per_day=hours_per_day,
               current_level=current_level
             )
-            print(f"✅ Schedule generated successfully, length: {len(schedule_output)} chars")
+            logger.debug("Schedule generated successfully length=%s", len(schedule_output))
             return schedule_output
           except Exception as e:
             import traceback
-            print(f"❌ Schedule generation tool failed: {traceback.format_exc()}")
+            logger.exception("Schedule generation tool failed")
     
     # If it's a weak areas request for exam prep agent, generate directly
     if is_weak_areas_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _identify_weak_areas
-      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+      from app.tools.prebuilt_agents import _identify_weak_areas
+      if is_exam_agent:
         import re
         # Extract parameters
         subject_match = re.search(r'subject[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
@@ -272,22 +295,22 @@ class LangchainAgentService:
         exam_type = exam_type_match.group(1).strip().strip('"') if exam_type_match else "general"
         
         try:
-          print(f"🎯 Intercepting weak areas request: subject={subject}, exam_type={exam_type}")
+          logger.debug("Intercepting weak areas request subject=%s exam_type=%s", subject, exam_type)
           weak_areas_output = _identify_weak_areas(
             subject=subject,
             practice_results=practice_results,
             exam_type=exam_type
           )
-          print(f"✅ Weak areas analysis generated successfully, length: {len(weak_areas_output)} chars")
+          logger.debug("Weak areas analysis generated successfully length=%s", len(weak_areas_output))
           return weak_areas_output
         except Exception as e:
           import traceback
-          print(f"❌ Weak areas analysis tool failed: {traceback.format_exc()}")
+          logger.exception("Weak areas analysis tool failed")
     
     # If it's a topic review request for exam prep agent, generate directly
     if is_topic_review_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _generate_topic_review
-      if agent.slug == PREBUILT_AGENT_SLUGS["exam_prep_agent"]:
+      from app.tools.prebuilt_agents import _generate_topic_review
+      if is_exam_agent:
         import re
         # Extract parameters
         topic_match = re.search(r'topic[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
@@ -300,22 +323,25 @@ class LangchainAgentService:
         review_type = review_type_match.group(1).strip().strip('"') if review_type_match else "comprehensive"
         
         try:
-          print(f"🎯 Intercepting topic review request: topic={topic}, difficulty={difficulty}, review_type={review_type}")
+          logger.debug(
+            "Intercepting topic review request topic=%s difficulty=%s review_type=%s",
+            topic, difficulty, review_type
+          )
           topic_review_output = _generate_topic_review(
             topic=topic,
             difficulty=difficulty,
             review_type=review_type
           )
-          print(f"✅ Topic review generated successfully, length: {len(topic_review_output)} chars")
+          logger.debug("Topic review generated successfully length=%s", len(topic_review_output))
           return topic_review_output
         except Exception as e:
           import traceback
-          print(f"❌ Topic review tool failed: {traceback.format_exc()}")
+          logger.exception("Topic review tool failed")
 
     # If it's a micro-lesson request for micro learning agent, generate directly
     if is_micro_lesson_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS, _generate_micro_lesson
-      if agent.slug == PREBUILT_AGENT_SLUGS["micro_learning_agent"]:
+      from app.tools.prebuilt_agents import _generate_micro_lesson
+      if is_micro_agent:
         import re
         # Extract parameters
         topic_match = re.search(r'topic[:\s]+"?([^",\n]+)"?', latest_input, re.IGNORECASE)
@@ -340,24 +366,24 @@ class LangchainAgentService:
           difficulty = "hard"
 
         try:
-          print(f"🎯 Intercepting micro-lesson request: topic={topic}, time_minutes={time_minutes}, difficulty={difficulty}")
+          logger.debug(
+            "Intercepting micro-lesson request topic=%s time_minutes=%s difficulty=%s",
+            topic, time_minutes, difficulty
+          )
           lesson_output = _generate_micro_lesson(
             topic=topic,
             time_minutes=time_minutes,
             difficulty=difficulty
           )
-          print(f"✅ Micro-lesson generated successfully, length: {len(lesson_output)} chars")
+          logger.debug("Micro-lesson generated successfully length=%s", len(lesson_output))
           return lesson_output
         except Exception as e:
           import traceback
-          print(f"❌ Micro-lesson tool failed: {traceback.format_exc()}")
+          logger.exception("Micro-lesson tool failed")
     
     # If it's a quiz request for prebuilt agents, generate directly
     if is_quiz_request and agent.is_prebuilt:
-      from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
-      if agent.slug in [PREBUILT_AGENT_SLUGS["personal_tutor"], 
-                        PREBUILT_AGENT_SLUGS["course_creation_agent"],
-                        PREBUILT_AGENT_SLUGS["language_practice_agent"]]:
+      if is_quiz_agent:
         # Extract quiz parameters from the request
         import re
         topic_match = re.search(r'(?:about|on|for)\s+([^,\.\?]+?)(?:\s+with|\s+at|\s+of|$)', latest_input, re.IGNORECASE)
@@ -384,11 +410,10 @@ class LangchainAgentService:
           return quiz_output
         except Exception as e:
           # Fallback to normal generation if tool fails
-          print(f"Quiz generation tool failed, falling back to normal generation: {str(e)}")
+          logger.warning("Quiz generation tool failed; falling back to normal generation: %s", str(e))
     
     # Tool-wired flow for Course Creation Agent: intercept common intents and delegate
     # directly to the prebuilt tools for fast, deterministic behavior.
-    from app.tools.prebuilt_agents import PREBUILT_AGENT_SLUGS
     if agent.is_prebuilt and agent.slug == PREBUILT_AGENT_SLUGS["course_creation_agent"]:
       import re
       from app.tools.prebuilt_agents import (
@@ -545,7 +570,7 @@ class LangchainAgentService:
           return _generate_skill_gap_agent_response(action=action, payload=action_payload)
         except Exception as e:
           import traceback
-          print(f"Skill gap tool failed: {traceback.format_exc()}")
+          logger.exception("Skill gap tool failed")
           return (
             '{"action":"'
             + action
@@ -614,7 +639,7 @@ class LangchainAgentService:
           return _generate_fitness_coach_response(action=action, payload=action_payload)
         except Exception as e:
           import traceback
-          print(f"Fitness coach tool failed: {traceback.format_exc()}")
+          logger.exception("Fitness coach tool failed")
           return (
             '{"action":"'
             + action
@@ -686,7 +711,7 @@ class LangchainAgentService:
           return _generate_career_coach_response(action=action, payload=action_payload)
         except Exception as e:
           import traceback
-          print(f"Career coach tool failed: {traceback.format_exc()}")
+          logger.exception("Career coach tool failed")
           return (
             '{"action":"'
             + action
@@ -752,7 +777,7 @@ class LangchainAgentService:
           )
         except Exception as e:
           import traceback
-          print(f"❌ Resume review tool failed: {traceback.format_exc()}")
+          logger.exception("Resume review tool failed")
           return (
             '{"error":"internal_error",'
             f'"message":"Unexpected error while generating resume review: {str(e)}","overall_score":0,"ats_score":0}}'
@@ -780,8 +805,12 @@ class LangchainAgentService:
       ]
 
       # Inject system instructions into the current input to avoid system-role messages.
-      if agent.system_prompt:
-        current_input = f"{agent.system_prompt}\n\n{current_input}" if current_input else agent.system_prompt
+      if settings.SYSTEM_PROMPT_MAX_CHARS > 0:
+        system_prompt = (agent.system_prompt or "")[:settings.SYSTEM_PROMPT_MAX_CHARS]
+      else:
+        system_prompt = agent.system_prompt or ""
+      if system_prompt:
+        current_input = f"{system_prompt}\n\n{current_input}" if current_input else system_prompt
       current_input = (current_input or "")[:MAX_INPUT_CHARS]
       
       result = chain.invoke(
@@ -805,7 +834,7 @@ class LangchainAgentService:
     except Exception as e:
       error_str = str(e).lower()
       if "'int' object has no attribute 'name'" in error_str or "finish_reason" in error_str:
-        print("Warning: Gemini finish_reason parsing failed in LangChain, using deterministic SDK fallback...")
+        logger.warning("Gemini finish_reason parsing failed in LangChain; using SDK fallback")
         try:
           from app.services.gemini import GeminiClient
           gemini_client = GeminiClient()
@@ -821,6 +850,7 @@ class LangchainAgentService:
             messages=message_payload,
             model=agent.model,
             temperature=agent.temperature,
+            max_output_tokens=settings.LLM_MAX_OUTPUT_TOKENS_LONGFORM if getattr(agent, "category", None) in {"education", "career"} else settings.LLM_MAX_OUTPUT_TOKENS,
           )
           return output
         except Exception as fallback_error:
@@ -862,8 +892,12 @@ class LangchainAgentService:
       prompt_parts.append("Assistant:")
 
       full_prompt = "\n".join(prompt_parts)
-      if agent.system_prompt:
-        full_prompt = f"{agent.system_prompt}\n\n{full_prompt}"
+      if settings.SYSTEM_PROMPT_MAX_CHARS > 0:
+        system_prompt = (agent.system_prompt or "")[:settings.SYSTEM_PROMPT_MAX_CHARS]
+      else:
+        system_prompt = agent.system_prompt or ""
+      if system_prompt:
+        full_prompt = f"{system_prompt}\n\n{full_prompt}"
 
       async for chunk in llm.astream(full_prompt):
         content = chunk.content if hasattr(chunk, "content") else str(chunk)

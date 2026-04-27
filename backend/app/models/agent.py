@@ -15,7 +15,7 @@ class Agent(Base):
     description = Column(String)
     system_prompt = Column(String, nullable=False)
     greeting_message = Column(String, nullable=True)  # Optional greeting message shown when conversation starts
-    model = Column(String, default="gemini-2.5-pro", nullable=False)
+    model = Column(String, default="gemini-2.5-flash", nullable=False)
     temperature = Column(Float, default=0.7, nullable=False)
     slug = Column(String, unique=True, nullable=True)
     category = Column(String, nullable=True)

@@ -1,7 +1,9 @@
 import json
 from typing import List
+import logging
 from langchain_core.tools import Tool
 
+logger = logging.getLogger("app.tools.prebuilt_agents")
 
 PREBUILT_AGENT_SLUGS = {
   "personal_tutor": "education.personal_tutor",
@@ -86,7 +88,7 @@ Generate the complete quiz now:"""
     quiz_content = gemini_client.generate_response(
       system_prompt="You are a quiz generator. Generate complete multiple-choice quizzes following the exact format specified.",
       messages=[{"role": "user", "content": quiz_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -120,7 +122,7 @@ Generate the complete quiz now:"""
   except Exception as e:
     # Fallback: return a template if direct generation fails
     import traceback
-    print(f"Error in _generate_quiz: {traceback.format_exc()}")
+    logger.exception("Error in _generate_quiz")
     # Return a simple template as fallback
     try:
       num_questions = max(1, min(20, int(num_questions) if isinstance(num_questions, (int, float, str)) else 5))
@@ -848,7 +850,7 @@ Generate the lesson now:"""
     lesson_content = gemini_client.generate_response(
       system_prompt="You are a micro-learning expert. Create focused, time-efficient lessons for busy learners.",
       messages=[{"role": "user", "content": lesson_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -856,7 +858,7 @@ Generate the lesson now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _generate_micro_lesson: {traceback.format_exc()}")
+    logger.exception("Error in _generate_micro_lesson")
     return f"Error generating lesson: {str(e)}. Please try again."
 
 
@@ -915,7 +917,7 @@ Generate the flashcards now:"""
     flashcard_content = gemini_client.generate_response(
       system_prompt="You are a flashcard creation expert. Create effective flashcards for spaced repetition learning.",
       messages=[{"role": "user", "content": flashcard_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -923,7 +925,7 @@ Generate the flashcards now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _create_flashcards: {traceback.format_exc()}")
+    logger.exception("Error in _create_flashcards")
     return f"Error creating flashcards: {str(e)}. Please try again."
 
 
@@ -1017,7 +1019,7 @@ Generate the complete exam now starting with **Question 1:**"""
     exam_content = gemini_client.generate_response(
       system_prompt="You are an exam creation expert. Create comprehensive practice exams following the exact format specified. DO NOT add any preamble, introduction, or conversational text. Start directly with the exam format.",
       messages=[{"role": "user", "content": exam_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1065,7 +1067,7 @@ Generate the complete exam now starting with **Question 1:**"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _create_practice_exam: {traceback.format_exc()}")
+    logger.exception("Error in _create_practice_exam")
     return f"Error creating practice exam: {str(e)}. Please try again."
 
 
@@ -1177,7 +1179,7 @@ Generate the complete study schedule now:"""
     schedule_content = gemini_client.generate_response(
       system_prompt="You are a study schedule expert. Create personalized, realistic study schedules for exam preparation.",
       messages=[{"role": "user", "content": schedule_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1185,7 +1187,7 @@ Generate the complete study schedule now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _create_study_schedule: {traceback.format_exc()}")
+    logger.exception("Error in _create_study_schedule")
     return f"Error creating study schedule: {str(e)}. Please try again."
 
 
@@ -1282,7 +1284,7 @@ Generate the complete analysis now:"""
     analysis_content = gemini_client.generate_response(
       system_prompt="You are an exam preparation analyst. Analyze practice results and provide actionable improvement recommendations.",
       messages=[{"role": "user", "content": analysis_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1290,7 +1292,7 @@ Generate the complete analysis now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _identify_weak_areas: {traceback.format_exc()}")
+    logger.exception("Error in _identify_weak_areas")
     return f"Error analyzing weak areas: {str(e)}. Please try again."
 
 
@@ -1422,7 +1424,7 @@ Generate the complete strategy guide now:"""
     strategy_content = gemini_client.generate_response(
       system_prompt="You are an exam strategy expert. Provide proven exam-taking strategies and techniques.",
       messages=[{"role": "user", "content": strategy_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1430,7 +1432,7 @@ Generate the complete strategy guide now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _create_exam_strategies: {traceback.format_exc()}")
+    logger.exception("Error in _create_exam_strategies")
     return f"Error creating exam strategies: {str(e)}. Please try again."
 
 
@@ -1549,7 +1551,7 @@ Generate the complete topic review now:"""
     review_content = gemini_client.generate_response(
       system_prompt="You are a topic review expert. Create comprehensive, focused review sessions for exam preparation.",
       messages=[{"role": "user", "content": review_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1557,7 +1559,7 @@ Generate the complete topic review now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _generate_topic_review: {traceback.format_exc()}")
+    logger.exception("Error in _generate_topic_review")
     return f"Error generating topic review: {str(e)}. Please try again."
 
 
@@ -1666,7 +1668,7 @@ Generate the complete progress report now:"""
     progress_content = gemini_client.generate_response(
       system_prompt="You are a progress tracking expert. Analyze exam preparation progress and provide actionable insights.",
       messages=[{"role": "user", "content": progress_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.7
     )
     
@@ -1674,7 +1676,7 @@ Generate the complete progress report now:"""
     
   except Exception as e:
     import traceback
-    print(f"Error in _track_progress: {traceback.format_exc()}")
+    logger.exception("Error in _track_progress")
     return f"Error tracking progress: {str(e)}. Please try again."
 
 
@@ -1801,7 +1803,7 @@ def _generate_resume_review(
         "You ONLY output valid JSON objects according to the user's schema."
       ),
       messages=[{"role": "user", "content": full_prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.3,
     )
 
@@ -1821,7 +1823,7 @@ def _generate_resume_review(
     return content
   except Exception as e:
     import traceback
-    print(f"Error in _generate_resume_review: {traceback.format_exc()}")
+    logger.exception("Error in _generate_resume_review")
     return (
       '{"error":"internal_error",'
       f'"message":"Unexpected error while generating resume review: {str(e)}","overall_score":0,"ats_score":0}}'
@@ -2271,7 +2273,7 @@ def _generate_career_coach_response(action: str, payload: dict) -> str:
         "Return strict JSON only, following the user-provided schema exactly."
       ),
       messages=[{"role": "user", "content": prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.35,
     )
   except Exception as e:
@@ -2786,7 +2788,7 @@ def _generate_skill_gap_agent_response(action: str, payload: dict) -> str:
         "Return strict JSON only, following the requested schema exactly."
       ),
       messages=[{"role": "user", "content": prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.3,
     )
   except Exception as e:
@@ -3364,7 +3366,7 @@ def _generate_fitness_coach_response(action: str, payload: dict) -> str:
         "Return strict JSON only, following the requested schema exactly."
       ),
       messages=[{"role": "user", "content": prompt}],
-      model="gemini-2.5-pro",
+      model="gemini-2.5-flash",
       temperature=0.3,
     )
   except Exception as e:
@@ -4145,3 +4147,4 @@ def get_tools_for_agent_slug(slug: str) -> List[Tool]:
     )
 
   return tools
+

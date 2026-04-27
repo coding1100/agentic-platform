@@ -16,8 +16,9 @@ class GeminiClient:
         self,
         system_prompt: str,
         messages: List[Dict[str, str]],
-        model: str = "gemini-2.5-pro",
-        temperature: float = 0.7
+        model: str = "gemini-2.5-flash",
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
     ) -> str:
         """
         Generate a response from Gemini.
@@ -32,12 +33,20 @@ class GeminiClient:
             Generated response text
         """
         try:
+            configured_max_tokens = getattr(settings, "LLM_MAX_OUTPUT_TOKENS", 1024)
+            if not isinstance(configured_max_tokens, int):
+                configured_max_tokens = 1024
+
+            configured_system_prompt_max_chars = getattr(settings, "SYSTEM_PROMPT_MAX_CHARS", 0)
+            if not isinstance(configured_system_prompt_max_chars, int):
+                configured_system_prompt_max_chars = 0
+
             # Configure the model
             generation_config = {
                 "temperature": temperature,
                 "top_p": 0.95,
                 "top_k": 40,
-                "max_output_tokens": 8192,
+                "max_output_tokens": max_output_tokens or configured_max_tokens,
             }
             
             # Build the conversation history
@@ -46,7 +55,11 @@ class GeminiClient:
             
             # Add system prompt as the first user message with instruction
             # Note: Gemini doesn't have a separate system role, so we prepend it
-            full_system_context = f"{system_prompt}\n\n"
+            if configured_system_prompt_max_chars > 0:
+                trimmed_system_prompt = (system_prompt or "")[:configured_system_prompt_max_chars]
+            else:
+                trimmed_system_prompt = system_prompt or ""
+            full_system_context = f"{trimmed_system_prompt}\n\n"
             
             # Convert messages to Gemini format
             for msg in messages:
