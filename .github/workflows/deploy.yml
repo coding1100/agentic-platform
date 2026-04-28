@@ -135,7 +135,7 @@ jobs:
           fi
 
           echo "Stopping existing containers..."
-          docker compose -f docker-compose.prod.yml down || true
+          docker compose -f docker-compose.prod.yml down --remove-orphans || true
 
           # Remove any containers that might be holding the ports
           docker stop agentic_platform_frontend agentic_platform_backend agentic_platform_db 2>/dev/null || true
@@ -151,6 +151,23 @@ jobs:
           fi
 
           if [ "$BUILD_FRONTEND" = true ]; then
+            docker build \
+              --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://agentic-platform.namatechnologlies.com}" \
+              -t agentic-platform-frontend \
+              -f frontend/Dockerfile frontend
+          fi
+
+          # Safety: if smart-diff skipped a build but image is missing on host, build it now.
+          if ! docker image inspect agentic-platform-backend >/dev/null 2>&1; then
+            echo "Backend image missing on host; building backend..."
+            docker build \
+              --build-arg REQUIREMENTS_FILE=requirements.txt \
+              -t agentic-platform-backend \
+              -f backend/Dockerfile backend
+          fi
+
+          if ! docker image inspect agentic-platform-frontend >/dev/null 2>&1; then
+            echo "Frontend image missing on host; building frontend..."
             docker build \
               --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://agentic-platform.namatechnologlies.com}" \
               -t agentic-platform-frontend \
